@@ -34,7 +34,7 @@ const recordFailure = (ip: string) => {
 
 const clearFailures = (ip: string) => { ipFailures.delete(ip) }
 
-app.post('/ah', async(c) => {
+app.get('/ah', async(c) => {
   const ip = getIP(c)
   if (checkRateLimit(ip)) return c.text(SYNC_CODE.msgBlockedIp, 403)
 
