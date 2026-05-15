@@ -11,7 +11,7 @@
     "@noble/hashes": "^2.0.0",
     "aes-js": "^3.1.2",
     "hono": "^4.4.0",
-    "message2call": "^0.1.3"
+    "message2call": "^2.0.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250508.0",
