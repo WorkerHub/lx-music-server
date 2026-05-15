@@ -28,5 +28,6 @@
       "matchPackagePatterns": ["^@cloudflare/"],
       "matchPackageNames": ["wrangler"]
     }
-  ]
+  ],
+  "ignoreDeps": ["message2call"]
 }

@@ -1,4 +1,4 @@
-import { createMessage2Call } from 'message2call'
+import { createMsg2call } from 'message2call'
 import { SYNC_CLOSE_CODE, SYNC_CODE } from '@/constants'
 import { aesDecrypt, aesEncrypt, rsaEncrypt, toMD5 } from '@/utils/crypto'
 import { decryptMsg, encryptMsg } from '@/utils/compress'
@@ -282,8 +282,8 @@ export class UserSyncDO implements DurableObject {
     let disconnected = false
     const closeHandlers: Array<(err: Error) => void> = []
 
-    const msg2call = createMessage2Call<LX.Sync.ClientSyncActions>({
-      exposeObj: callObj,
+    const msg2call = createMsg2call<LX.Sync.ClientSyncActions>({
+      funcsObj: callObj,
       timeout: 120 * 1000,
       sendMessage: (data) => {
         if (disconnected) throw new Error('disconnected')
@@ -308,8 +308,8 @@ export class UserSyncDO implements DurableObject {
       feature: { list: false, dislike: false },
       syncRefs: { list: this.listSyncRef, dislike: this.dislikeSyncRef },
       remote: msg2call.remote as any,
-      remoteQueueList: msg2call.createRemoteGroup('list') as any,
-      remoteQueueDislike: msg2call.createRemoteGroup('dislike') as any,
+      remoteQueueList: msg2call.createQueueRemote('list') as any,
+      remoteQueueDislike: msg2call.createQueueRemote('dislike') as any,
       broadcast: (handler) => {
         for (const s of this.sockets) handler(s)
       },
