@@ -3,6 +3,7 @@
   "extends": ["config:recommended"],
   "schedule": ["before 6am on Monday"],
   "timezone": "Asia/Shanghai",
+  "platformAutomerge": true,
   "labels": ["dependencies"],
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
@@ -22,6 +23,10 @@
       "groupName": "minor updates",
       "automerge": true,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     },
     {
       "groupName": "Cloudflare packages",
