@@ -3,9 +3,9 @@
 [![Deploy](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml/badge.svg)](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0b7a75.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020.svg)](https://workers.cloudflare.com/)
-[![pnpm](https://img.shields.io/badge/pnpm-11.5.0-f69220.svg)](https://pnpm.io/)
+[![pnpm](https://img.shields.io/badge/pnpm-11.5-f69220.svg)](https://pnpm.io/)
 
-`lx-music-sync-server` 的 Cloudflare Workers 重构版，基于 Durable Objects 提供有状态 WebSocket 同步。
+[`lx-music-sync-server`](https://github.com/lyswhut/lx-music-sync-server) 的 Cloudflare Workers 重构版，基于 Durable Objects 提供有状态 WebSocket 同步。
 
 核心目标：不用自托管服务器，也能稳定做多设备实时同步。
 

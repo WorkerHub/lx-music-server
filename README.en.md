@@ -3,9 +3,9 @@
 [![Deploy](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml/badge.svg)](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0b7a75.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020.svg)](https://workers.cloudflare.com/)
-[![pnpm](https://img.shields.io/badge/pnpm-11.5.0-f69220.svg)](https://pnpm.io/)
+[![pnpm](https://img.shields.io/badge/pnpm-11.5-f69220.svg)](https://pnpm.io/)
 
-A Cloudflare Workers rewrite of `lx-music-sync-server`, using Durable Objects for stateful WebSocket synchronization.
+A Cloudflare Workers rewrite of [`lx-music-sync-server`](https://github.com/lyswhut/lx-music-sync-server), using Durable Objects for stateful WebSocket synchronization.
 
 Built for one goal: run multi-device sync without self-hosting servers.
 
