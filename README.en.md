@@ -62,13 +62,8 @@ Secrets:
 | Name | Description |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | API token from step 2 |
-| `LX_USERS` | User config list |
-
-Variables:
-
-| Name | Description |
-|---|---|
 | `KV_NAMESPACE_ID` | KV namespace ID |
+| `LX_USERS` | User config list |
 
 ### 4. Configure users (`LX_USERS`)
 
@@ -182,8 +177,7 @@ Key dependencies:
 
 Check GitHub Actions config placement first:
 
-- `KV_NAMESPACE_ID` must be in **Variables**
-- `CLOUDFLARE_API_TOKEN` and `LX_USERS` must be in **Secrets**
+- `CLOUDFLARE_API_TOKEN`, `KV_NAMESPACE_ID`, and `LX_USERS` must be in **Secrets**
 
 If Variables and Secrets are mixed up, deployment will fail.
 

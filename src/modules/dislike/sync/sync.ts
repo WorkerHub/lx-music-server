@@ -13,7 +13,6 @@ const wait = (time = 1000) =>
 const getRemoteListData = async (
   socket: LX.Socket,
 ): Promise<LX.Dislike.DislikeRules> => {
-  console.log('getRemoteListData')
   return (await socket.remoteQueueDislike.dislike_sync_get_list_data()) ?? ''
 }
 
@@ -79,7 +78,7 @@ const overwriteRemoteListData = async (
           // TODO send status
           client.close(SYNC_CLOSE_CODE.failed)
           // client.moduleReadys.list = false
-          console.log(err.message)
+          console.error(err.message)
         }),
     )
   })
@@ -119,7 +118,6 @@ const handleMergeListData = async (
     getRemoteListData(socket),
     getLocalListData(socket),
   ])
-  console.log('handleMergeListData', 'remoteListData, localListData')
   let listData: LX.Dislike.DislikeRules
   let requiredUpdateLocalListData = true
   let requiredUpdateRemoteListData = true
@@ -151,9 +149,6 @@ const handleSyncList = async (socket: LX.Socket) => {
     getRemoteListData(socket),
     getLocalListData(socket),
   ])
-  console.log('handleSyncList', 'remoteListData, localListData')
-  console.log('localListData', localListData.length)
-  console.log('remoteListData', remoteListData.length)
   const userSpace = getUserSpace(socket.userInfo.name)
   const clientId = socket.keyInfo.clientId
   if (localListData.length) {
@@ -163,12 +158,6 @@ const handleSyncList = async (socket: LX.Socket) => {
         requiredUpdateLocalListData,
         requiredUpdateRemoteListData,
       ] = await handleMergeListData(socket)
-      console.log(
-        'handleMergeListData',
-        'mergedList',
-        requiredUpdateLocalListData,
-        requiredUpdateRemoteListData,
-      )
       let key: string | undefined
       if (requiredUpdateLocalListData) {
         key = await setLocalList(socket, mergedList)
@@ -279,7 +268,6 @@ const syncDislike = async (socket: LX.Socket) => {
         userCurrentDislikeInfoKey,
       )
       if (listData) {
-        console.log('handleMergeDislikeDataFromSnapshot')
         await handleMergeListDataFromSnapshot(socket, listData)
         return
       }

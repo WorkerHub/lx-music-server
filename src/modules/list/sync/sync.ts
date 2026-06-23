@@ -26,7 +26,6 @@ const patchListData = (
 const getRemoteListData = async (
   socket: LX.Socket,
 ): Promise<LX.Sync.List.ListData> => {
-  console.log('getRemoteListData')
   return patchListData(await socket.remoteQueueList.list_sync_get_list_data())
 }
 
@@ -92,7 +91,7 @@ const overwriteRemoteListData = async (
           // TODO send status
           client.close(SYNC_CLOSE_CODE.failed)
           // client.moduleReadys.list = false
-          console.log(err.message)
+          console.error(err.message)
         }),
     )
   })
@@ -244,7 +243,6 @@ const handleMergeListData = async (
     getRemoteListData(socket),
     getLocalListData(socket),
   ])
-  console.log('handleMergeListData', 'remoteListData, localListData')
   let listData: LX.Sync.List.ListData
   let requiredUpdateLocalListData = true
   let requiredUpdateRemoteListData = true
@@ -282,19 +280,6 @@ const handleSyncList = async (socket: LX.Socket) => {
     getRemoteListData(socket),
     getLocalListData(socket),
   ])
-  console.log('handleSyncList', 'remoteListData, localListData')
-  console.log(
-    'localListData',
-    localListData.defaultList.length ||
-      localListData.loveList.length ||
-      localListData.userList.length,
-  )
-  console.log(
-    'remoteListData',
-    remoteListData.defaultList.length ||
-      remoteListData.loveList.length ||
-      remoteListData.userList.length,
-  )
   const userSpace = getUserSpace(socket.userInfo.name)
   const clientId = socket.keyInfo.clientId
   if (
@@ -312,12 +297,6 @@ const handleSyncList = async (socket: LX.Socket) => {
         requiredUpdateLocalListData,
         requiredUpdateRemoteListData,
       ] = await handleMergeListData(socket)
-      console.log(
-        'handleMergeListData',
-        'mergedList',
-        requiredUpdateLocalListData,
-        requiredUpdateRemoteListData,
-      )
       let key: string | undefined
       if (requiredUpdateLocalListData) {
         key = await setLocalList(socket, mergedList)
@@ -401,7 +380,6 @@ const checkListLatest = async (socket: LX.Socket) => {
       socket.keyInfo.clientId,
     )
   const currentListInfoKey = await userSpace.listManage.getCurrentListInfoKey()
-  // console.log('checkListLatest', remoteListMD5, currentListInfoKey)
   const latest = remoteListMD5 === currentListInfoKey
   if (latest && userCurrentListInfoKey !== currentListInfoKey)
     await userSpace.listManage.updateDeviceSnapshotKey(
@@ -540,7 +518,6 @@ const syncList = async (socket: LX.Socket) => {
         userCurrentListInfoKey,
       )
       if (listData) {
-        console.log('handleMergeListDataFromSnapshot')
         await handleMergeListDataFromSnapshot(socket, listData)
         return
       }

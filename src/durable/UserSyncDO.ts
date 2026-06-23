@@ -339,7 +339,7 @@ export class UserSyncDO implements DurableObject {
         socket.isReady = true
       })
       .catch((err) => {
-        console.warn('sync error:', err?.message)
+        console.error('sync error:', err?.message)
         socket.close(SYNC_CLOSE_CODE.failed)
       })
 
@@ -382,11 +382,8 @@ export class UserSyncDO implements DurableObject {
           })
       },
       onCallBeforeParams: (rawArgs) => [socket, ...rawArgs],
-      onError: (error, path, groupName) => {
-        console.error(
-          `sync call ${user.name} ${keyInfo.deviceName} ${groupName ?? ''} ${path.join('.')}:`,
-          error,
-        )
+      onError: (error, _path, _groupName) => {
+        console.error('sync call error:', error)
       },
     })
 
@@ -459,7 +456,6 @@ export class UserSyncDO implements DurableObject {
           h(err)
         } catch {}
       }
-      console.log('disconnected', user.name, keyInfo.deviceName)
     })
 
     return socket

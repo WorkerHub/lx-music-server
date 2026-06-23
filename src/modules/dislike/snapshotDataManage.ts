@@ -10,7 +10,6 @@ interface SnapshotInfo {
 export class SnapshotDataManage {
   private storage: DurableObjectStorage
   private prefix: 'list' | 'dislike'
-  private userName: string
   private maxSnapshotNum: number
   snapshotInfo: SnapshotInfo
   clientSnapshotKeys: Set<string>
@@ -80,18 +79,16 @@ export class SnapshotDataManage {
       const data = await this.storage.get<string>(`${this.prefix}:snap:${name}`)
       return data ?? null
     } catch (err) {
-      console.warn(err)
+      console.error(err)
       return null
     }
   }
 
   saveSnapshot = async (name: string, data: string) => {
-    console.log('saveSnapshot', this.userName, name)
     await this.storage.put(`${this.prefix}:snap:${name}`, data)
   }
 
   removeSnapshot = async (name: string) => {
-    console.log('removeSnapshot', this.userName, name)
     await this.storage.delete(`${this.prefix}:snap:${name}`)
   }
 
@@ -103,12 +100,11 @@ export class SnapshotDataManage {
     storage: DurableObjectStorage,
     prefix: 'list' | 'dislike',
     preloadedSnapshotInfo: SnapshotInfo,
-    userName: string,
+    _userName: string,
     maxSnapshotNum: number,
   ) {
     this.storage = storage
     this.prefix = prefix
-    this.userName = userName
     this.maxSnapshotNum = maxSnapshotNum
     this.snapshotInfo = preloadedSnapshotInfo
 

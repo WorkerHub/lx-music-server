@@ -5,7 +5,6 @@ const handleListAction = async (
   userName: string,
   param: LX.Sync.Dislike.ActionList,
 ) => {
-  console.log('handleListAction', userName, param.action)
   switch (param.action) {
     case 'dislike_data_overwrite':
       await global.event_dislike.dislike_data_overwrite(
@@ -32,7 +31,6 @@ const handler: LX.Sync.ServerSyncHandlerDislikeActions<LX.Socket> = {
   async onDislikeSyncAction(socket, action) {
     if (!socket.moduleReadys?.dislike) return
     const key = await handleListAction(socket.userInfo.name, action)
-    console.log(key)
     const userSpace = getUserSpace(socket.userInfo.name)
     await userSpace.dislikeManage.updateDeviceSnapshotKey(
       socket.keyInfo.clientId,
@@ -57,7 +55,7 @@ const handler: LX.Sync.ServerSyncHandlerDislikeActions<LX.Socket> = {
         })
         .catch((err) => {
           client.close(SYNC_CLOSE_CODE.failed)
-          console.log(err.message)
+          console.error(err.message)
         })
     })
   },

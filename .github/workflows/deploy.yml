@@ -28,17 +28,16 @@ jobs:
 
       - name: Inject users config
         env:
-          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
           LX_USERS: ${{ secrets.LX_USERS }}
         run: |
-          sed -i "s/KV_NAMESPACE_ID_PLACEHOLDER/${{ vars.KV_NAMESPACE_ID }}/g" wrangler.toml
-
           # LX_USERS secret 格式:
           #   简单模式: user1:password1,user2:password2
           #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           python3 - <<'EOF'
           import os, json
 
+          kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "")
           raw = os.environ.get("LX_USERS", "")
           if not raw:
               users = []
@@ -59,6 +58,7 @@ jobs:
           with open('wrangler.toml', 'r') as f:
               content = f.read()
 
+          content = content.replace('KV_NAMESPACE_ID_PLACEHOLDER', kv_namespace_id)
           content = content.replace('"LX_USERS_PLACEHOLDER"', json.dumps(users_json))
 
           with open('wrangler.toml', 'w') as f:
@@ -66,6 +66,12 @@ jobs:
           EOF
 
       - name: Deploy
-        run: pnpm wrangler deploy
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm wrangler deploy 2>&1 | sed -E \
+            -e 's/env\.LX_USERS \(".*"\)/env.LX_USERS (***)/g' \
+            -e 's/env\.KV[^ ]* \([^)]*\)/env.KV (***)/g' \
+            -e 's#https://([a-z0-9-]+)\.[a-z0-9-]+\.workers\.dev/?#https://\1.***.workers.dev/#gI'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

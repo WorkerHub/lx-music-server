@@ -5,7 +5,6 @@ const handleListAction = async (
   userName: string,
   { action, data }: LX.Sync.List.ActionList,
 ) => {
-  console.log('handleListAction', userName, action)
   switch (action) {
     case 'list_data_overwrite':
       await global.event_list.list_data_overwrite(userName, data, true)
@@ -94,7 +93,6 @@ const handler: LX.Sync.ServerSyncHandlerListActions<LX.Socket> = {
   async onListSyncAction(socket, action) {
     if (!socket.moduleReadys?.list) return
     const key = await handleListAction(socket.userInfo.name, action)
-    console.log(key)
     const userSpace = getUserSpace(socket.userInfo.name)
     await userSpace.listManage.updateDeviceSnapshotKey(
       socket.keyInfo.clientId,
@@ -119,7 +117,7 @@ const handler: LX.Sync.ServerSyncHandlerListActions<LX.Socket> = {
         })
         .catch((err) => {
           client.close(SYNC_CLOSE_CODE.failed)
-          console.log(err.message)
+          console.error(err.message)
         })
     })
   },

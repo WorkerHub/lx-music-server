@@ -57,18 +57,13 @@
 
 在仓库 **Settings -> Secrets and variables -> Actions** 中添加：
 
-Secrets（敏感信息）：
+Secrets：
 
 | 名称 | 说明 |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | 上一步创建的 API Token |
-| `LX_USERS` | 用户配置（见下一节） |
-
-Variables（非敏感配置）：
-
-| 名称 | 说明 |
-|---|---|
 | `KV_NAMESPACE_ID` | KV Namespace ID |
+| `LX_USERS` | 用户配置（见下一节） |
 
 ### 4. 配置用户（LX_USERS）
 
@@ -182,8 +177,7 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：
 
-- `KV_NAMESPACE_ID` 必须放在 **Variables**
-- `CLOUDFLARE_API_TOKEN` 和 `LX_USERS` 必须放在 **Secrets**
+- `CLOUDFLARE_API_TOKEN`、`KV_NAMESPACE_ID` 和 `LX_USERS` 必须放在 **Secrets**
 
 如果把 Variables 和 Secrets 混淆，部署会直接失败。
 

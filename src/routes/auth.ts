@@ -78,26 +78,13 @@ app.get('/ah', async (c) => {
     return c.text(await resp.text())
   }
 
-  // 新设备首次认证
-  console.log(
-    '[auth] new device, users:',
-    users.length,
-    'encryptedMsg len:',
-    encryptedMsg.length,
-  )
   for (const userInfo of users) {
     const keyHex = toMD5(userInfo.password).substring(0, 16)
     const key = btoa(keyHex)
-    console.log('[auth] trying user:', userInfo.name, 'keyHex:', keyHex)
     let text: string
     try {
       text = aesDecrypt(encryptedMsg, key)
-      console.log(
-        '[auth] decrypt ok, starts with authMsg:',
-        text.startsWith(SYNC_CODE.authMsg),
-      )
-    } catch (e: any) {
-      console.log('[auth] decrypt failed:', e?.message)
+    } catch (_e: any) {
       continue
     }
     if (!text.startsWith(SYNC_CODE.authMsg)) continue
