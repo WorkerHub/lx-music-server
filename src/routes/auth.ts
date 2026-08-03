@@ -38,6 +38,15 @@ const clearFailures = (ip: string) => {
   ipFailures.delete(ip)
 }
 
+const parseUsers = (raw: string): LX.User[] | null => {
+  try {
+    return JSON.parse(raw || '[]')
+  } catch (err) {
+    console.error('invalid LX_USERS:', err)
+    return null
+  }
+}
+
 app.get('/ah', async (c) => {
   const ip = getIP(c)
   if (checkRateLimit(ip)) return c.text(SYNC_CODE.msgBlockedIp, 403)
@@ -50,7 +59,8 @@ app.get('/ah', async (c) => {
     return c.text(SYNC_CODE.msgAuthFailed, 401)
   }
 
-  const users: LX.User[] = JSON.parse(c.env.LX_USERS || '[]')
+  const users = parseUsers(c.env.LX_USERS)
+  if (!users) return c.text('Server Misconfigured', 500)
   const serverName = c.env.SERVER_NAME || 'LX Music Server'
   const kv = c.env.KV
 

@@ -11,16 +11,19 @@ export interface UserSpace {
   flush: () => Promise<void>
 }
 
-// 模块级别单例，由 UserSyncDO 在 blockConcurrencyWhile 中初始化
-let _userSpace: UserSpace | null = null
+// 模块级上下文，按 userName 隔离，避免多用户 DO 复用同一 isolate 时串号
+const _userSpaceMap = new Map<string, UserSpace>()
 
-export const setUserSpace = (userSpace: UserSpace) => {
-  _userSpace = userSpace
+export const setUserSpace = (name: string, userSpace: UserSpace) => {
+  if (!name) return
+  _userSpaceMap.set(name, userSpace)
 }
 
-export const getUserSpace = (_name?: string): UserSpace => {
-  if (!_userSpace) throw new Error('UserSpace not initialized')
-  return _userSpace
+export const getUserSpace = (name: string): UserSpace => {
+  if (!name) throw new Error('userName required')
+  const userSpace = _userSpaceMap.get(name)
+  if (!userSpace) throw new Error(`UserSpace not initialized: ${name}`)
+  return userSpace
 }
 
 export const createUserSpace = (

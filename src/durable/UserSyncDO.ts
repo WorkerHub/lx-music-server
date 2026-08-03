@@ -113,7 +113,7 @@ export class UserSyncDO implements DurableObject {
       maxSnapshotNum,
     )
     this.userSpace = userSpace
-    setUserSpace(userSpace)
+    setUserSpace(userName, userSpace)
 
     if (!global.event_list) global.event_list = new ListEvent() as ListEventType
     if (!global.event_dislike)
@@ -403,7 +403,8 @@ export class UserSyncDO implements DurableObject {
       onClose: (handler) => {
         closeHandlers.push(handler)
         return () => {
-          closeHandlers.splice(closeHandlers.indexOf(handler), 1)
+          const idx = closeHandlers.indexOf(handler)
+          if (idx >= 0) closeHandlers.splice(idx, 1)
         }
       },
       send: (data, cb) => {
