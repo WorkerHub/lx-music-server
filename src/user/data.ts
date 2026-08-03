@@ -66,7 +66,7 @@ export class UserDataManage {
   saveClientKeyInfo = async (keyInfo: LX.Sync.KeyInfo): Promise<void> => {
     if (
       this.devicesInfo.clients[keyInfo.clientId] == null &&
-      Object.keys(this.devicesInfo.clients).length > 101
+      Object.keys(this.devicesInfo.clients).length >= 100
     )
       throw new Error('max keys')
     this.devicesInfo.clients[keyInfo.clientId] = keyInfo

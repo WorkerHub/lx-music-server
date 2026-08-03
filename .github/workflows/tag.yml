@@ -47,7 +47,6 @@ jobs:
       - name: Check if tag already exists
         run: |
           TAG="${{ inputs.tag }}"
-          git fetch --tags
           if git tag -l | grep -q "^${TAG}$"; then
             echo "❌ Error: Tag '$TAG' already exists"
             echo "Existing tags:"
