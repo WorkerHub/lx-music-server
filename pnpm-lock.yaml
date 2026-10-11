@@ -174,7 +174,7 @@ importers:
         version: 3.1.2
       hono:
         specifier: ^4.12.26
-        version: 4.13.12
+        version: 4.13.13
       message2call:
         specifier: ^0.1.3
         version: 0.1.3
@@ -799,8 +799,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  hono@4.13.12:
-    resolution: {integrity: sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw==}
+  hono@4.13.13:
+    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
     engines: {node: '>=16.9.0'}
 
   kleur@4.1.5:
@@ -1275,7 +1275,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  hono@4.13.12: {}
+  hono@4.13.13: {}
 
   kleur@4.1.5: {}
 
