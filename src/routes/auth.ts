@@ -23,9 +23,9 @@ const parseUsers = (raw: string): LX.User[] | null => {
   }
 }
 
-// `client:{id}` → userName 映射的 TTL（秒）。30 天，设备重新认证时续期，
+// `client:{id}` → userName 映射的 TTL（秒）。365 天，设备重新认证时续期，
 // 避免被删除外的所有路径留下永不过期的孤儿映射（REVIEW M5）。
-const CLIENT_MAPPING_TTL_SECONDS = 30 * 24 * 60 * 60
+const CLIENT_MAPPING_TTL_SECONDS = 365 * 24 * 60 * 60
 
 app.get('/ah', async (c) => {
   const ip = getIP(c)
@@ -47,7 +47,7 @@ app.get('/ah', async (c) => {
   if (clientId) {
     const userName = await kv.get(`client:${clientId}`)
     if (!userName) {
-      // 映射已过期（30 天 TTL）或被删除：客户端始终带 i 头、且不会自动回退到
+      // 映射已过期（365 天 TTL）或被删除：客户端始终带 i 头、且不会自动回退到
       // 首次认证，这里只能返回 401。用户需在客户端重新输入密码走首次认证重新
       // 配对（会生成新的 clientId）。这是个人同步服务下可接受的权衡（REVIEW M5）。
       return c.text(SYNC_CODE.msgAuthFailed, 401)

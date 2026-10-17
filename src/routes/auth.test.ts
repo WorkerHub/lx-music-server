@@ -3,7 +3,7 @@ import { aesEncrypt } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import app from './auth'
 
-const CLIENT_MAPPING_TTL_SECONDS = 30 * 24 * 60 * 60
+const CLIENT_MAPPING_TTL_SECONDS = 365 * 24 * 60 * 60
 
 const makeEnv = (
   kv: {
