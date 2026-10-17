@@ -23,6 +23,10 @@ const parseUsers = (raw: string): LX.User[] | null => {
   }
 }
 
+// `client:{id}` → userName 映射的 TTL（秒）。30 天，设备重新认证时续期，
+// 避免被删除外的所有路径留下永不过期的孤儿映射（REVIEW M5）。
+const CLIENT_MAPPING_TTL_SECONDS = 30 * 24 * 60 * 60
+
 app.get('/ah', async (c) => {
   const ip = getIP(c)
   if (await isRateLimited(c.env, ip)) return c.text(SYNC_CODE.msgBlockedIp, 403)
@@ -57,6 +61,10 @@ app.get('/ah', async (c) => {
     if (!resp.ok) {
       return c.text(SYNC_CODE.msgAuthFailed, 401)
     }
+    // 重新认证成功即续期映射，避免活跃设备因 TTL 到期而被判为未知。
+    await kv.put(`client:${clientId}`, userName, {
+      expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
+    })
     return c.text(await resp.text())
   }
 
@@ -93,7 +101,9 @@ app.get('/ah', async (c) => {
       clientId: string
       userName: string
     }>()
-    await kv.put(`client:${result.clientId}`, result.userName)
+    await kv.put(`client:${result.clientId}`, result.userName, {
+      expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
+    })
     return c.text(result.encrypted)
   }
 

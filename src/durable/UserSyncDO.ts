@@ -25,6 +25,17 @@ const DEFAULT_SNAPSHOT_INFO = {
 const IP_FAILURE_TTL_MS = 60 * 1000
 const IP_FAILURE_LIMIT = 10
 const PING_INTERVAL_MS = 30 * 1000
+// 每用户最大并发 WebSocket 连接数。LX Music 同步是个人场景，几十个连接已非常
+// 充裕；上限用于约束异常/恶意客户端把 DO 的连接与计费打爆（REVIEW M1 的
+// “连接数上限”退路）。
+const MAX_CONNECTIONS_PER_USER = 20
+
+// 判断是否因连接数上限而拒绝新连接：已达上限且不是同一 clientId 的重连。
+// 抽成纯函数以便单测（Node 的 Response 无法构造 101，故不测 upgrade 集成路径）。
+export const isConnectionLimitReached = (
+  socketCount: number,
+  hasSameClientId: boolean,
+): boolean => socketCount >= MAX_CONNECTIONS_PER_USER && !hasSameClientId
 
 export class UserSyncDO implements DurableObject {
   private state: DurableObjectState
@@ -158,9 +169,14 @@ export class UserSyncDO implements DurableObject {
 
   private async handleGetDevices(): Promise<Response> {
     if (!this.userSpace)
-      return new Response('[]', {
-        headers: { 'content-type': 'application/json' },
-      })
+      // 初始化失败时返回明确的错误状态，而不是空数组，避免掩盖问题（REVIEW L6）。
+      return new Response(
+        JSON.stringify({ error: 'user space not initialized' }),
+        {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        },
+      )
     const devices = await this.userSpace.getDevices()
     // key is the per-device AES symmetric key — never expose it over the management API
     const safeDevices = devices.map(({ key: _key, ...rest }) => rest)
@@ -320,6 +336,19 @@ export class UserSyncDO implements DurableObject {
     const user = users.find((u) => u.name === this.userName)
     if (!user) return new Response(SYNC_CODE.msgAuthFailed, { status: 401 })
 
+    // 连接数上限：已达上限且非同一 clientId 重连时拒绝。同一 clientId 重连会
+    // 在下方踢掉旧连接，不会增加连接总数，故予以放行。
+    const hasExistingConnection = Array.from(this.sockets).some(
+      (s) => s.keyInfo.clientId === clientId,
+    )
+    if (isConnectionLimitReached(this.sockets.size, hasExistingConnection)) {
+      const [rejectClient, rejectServer] = Object.values(new WebSocketPair())
+      rejectServer.accept()
+      // 用 SYNC_CLOSE_CODE.failed 关闭，客户端不会反复重连。
+      rejectServer.close(SYNC_CLOSE_CODE.failed, 'too many connections')
+      return new Response(null, { status: 101, webSocket: rejectClient })
+    }
+
     keyInfo.lastConnectDate = Date.now()
     await this.userSpace.dataManage.saveClientKeyInfo(keyInfo)
 
@@ -355,6 +384,9 @@ export class UserSyncDO implements DurableObject {
 
   private startPingInterval() {
     if (this.pingInterval !== null) return
+    // 只有存在移动端连接时才需要应用层 'ping' 心跳（桌面端不依赖它）。没有
+    // 移动端连接时不启动定时器，避免 setInterval 让 DO 无谓常驻（REVIEW M1）。
+    if (!this.hasMobileConnection) return
     this.pingInterval = setInterval(() => {
       for (const socket of this.sockets) {
         if (socket.keyInfo.isMobile) {
@@ -362,6 +394,13 @@ export class UserSyncDO implements DurableObject {
         }
       }
     }, PING_INTERVAL_MS)
+  }
+
+  private get hasMobileConnection(): boolean {
+    for (const socket of this.sockets) {
+      if (socket.keyInfo.isMobile) return true
+    }
+    return false
   }
 
   private createSocket(
@@ -454,11 +493,12 @@ export class UserSyncDO implements DurableObject {
       disconnected = true
       msg2call.destroy()
       this.sockets.delete(socket)
+      // 没有移动端连接时停止 ping 定时器；没有连接时再 flush 延迟写。
+      if (!this.hasMobileConnection && this.pingInterval !== null) {
+        clearInterval(this.pingInterval)
+        this.pingInterval = null
+      }
       if (this.sockets.size === 0) {
-        if (this.pingInterval !== null) {
-          clearInterval(this.pingInterval)
-          this.pingInterval = null
-        }
         // Flush any throttle-deferred snapshot writes before DO may hibernate
         void this.userSpace?.flush()
       }

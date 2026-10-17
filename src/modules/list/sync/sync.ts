@@ -10,6 +10,10 @@ import { buildUserListInfoFull } from '../utils'
 const wait = (time = 1000) =>
   new Promise<void>((resolve) => setTimeout(resolve, time))
 
+// 同步互斥锁的最大等待时间。前一个同步若卡住（msg2call 超时约 120s 才解除），
+// 后到的同用户同步最多再等这么久，超过即抛错释放 DO 时间片（REVIEW M7）。
+const SYNC_LOCK_TIMEOUT_MS = 150 * 1000
+
 const patchListData = (
   listData: Partial<LX.Sync.List.ListData>,
 ): LX.Sync.List.ListData => {
@@ -534,9 +538,12 @@ export const sync = async (socket: LX.Socket) => {
     if (syncRef.current === socket.keyInfo.clientId) syncRef.current = null
   })
 
+  const startedAt = Date.now()
   while (true) {
     if (disconnected) throw new Error('disconnected')
     if (!syncRef.current) break
+    if (Date.now() - startedAt >= SYNC_LOCK_TIMEOUT_MS)
+      throw new Error('sync lock wait timeout')
     await wait()
   }
 
