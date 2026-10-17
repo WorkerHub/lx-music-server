@@ -66,7 +66,10 @@ export class SnapshotDataManage {
     client.snapshotKey = key
     client.lastSyncDate = Date.now()
     this.incrementRef(key)
-    this.saveSnapshotInfoThrottle()
+    // The per-device snapshotKey rebuilds the reference count on restart, so it
+    // must not sit behind the throttle timer (REVIEW M2): write through now.
+    // Pruning still runs on the next createSnapshot (via saveSnapshotInfo).
+    await this.persistSnapshotInfo()
   }
 
   getDeviceCurrentSnapshotKey = async (clientId: string) => {
@@ -136,9 +139,9 @@ export class SnapshotDataManage {
     this.maxSnapshotNum = maxSnapshotNum
     this.snapshotInfo = preloadedSnapshotInfo
 
-    // Throttle only the non-critical per-device tracking (snapshotKey /
-    // lastSyncDate). The snapshot index itself is persisted eagerly in
-    // `saveSnapshotInfo`.
+    // Only device removal is throttled now. Its write can only over-protect a
+    // snapshot if lost (the stale entry still references the key), never drop
+    // data. snapshotKey updates and the snapshot index persist eagerly.
     this.saveSnapshotInfoThrottle = throttle(() => {
       void this.persistSnapshotInfo()
         .then(() => {

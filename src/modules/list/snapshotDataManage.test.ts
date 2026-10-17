@@ -111,4 +111,46 @@ describe('shared snapshot key reference counting (L3)', () => {
     await manage.removeSnapshotInfo('devB')
     expect(manage.isIncludesDevice('K')).toBe(false)
   })
+
+  it('stays balanced when the same device re-syncs to the same key', async () => {
+    const storage = createStorage()
+    const manage = new SnapshotDataManage(
+      storage,
+      'list',
+      {
+        latest: 'L',
+        time: 0,
+        list: ['K'],
+        clients: { devA: { snapshotKey: 'K', lastSyncDate: 0 } },
+      },
+      'user',
+      2,
+    )
+
+    // Same-key update is decrement(K) then increment(K): net zero.
+    await manage.updateDeviceSnapshotKey('devA', 'K')
+    expect(manage.isIncludesDevice('K')).toBe(true)
+    await manage.updateDeviceSnapshotKey('devA', 'K')
+    expect(manage.isIncludesDevice('K')).toBe(true)
+  })
+
+  it('stays balanced across remove then re-add of the same key', async () => {
+    const storage = createStorage()
+    const manage = new SnapshotDataManage(
+      storage,
+      'list',
+      { latest: 'L', time: 0, list: ['K'], clients: {} },
+      'user',
+      2,
+    )
+
+    await manage.updateDeviceSnapshotKey('devA', 'K')
+    expect(manage.isIncludesDevice('K')).toBe(true)
+
+    manage.removeSnapshotInfo('devA')
+    expect(manage.isIncludesDevice('K')).toBe(false)
+
+    await manage.updateDeviceSnapshotKey('devA', 'K')
+    expect(manage.isIncludesDevice('K')).toBe(true)
+  })
 })

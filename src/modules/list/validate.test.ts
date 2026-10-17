@@ -45,4 +45,31 @@ describe('isValidListAction', () => {
   it('rejects an unknown action name', () => {
     expect(isValidListAction({ action: 'not_an_action', data: {} })).toBe(false)
   })
+
+  it('rejects list_update entries without a string id', () => {
+    expect(
+      isValidListAction({ action: 'list_update', data: [{ name: 'A' }] }),
+    ).toBe(false)
+    expect(isValidListAction({ action: 'list_update', data: [null] })).toBe(
+      false,
+    )
+  })
+
+  it('accepts list_update entries with a string id', () => {
+    expect(
+      isValidListAction({
+        action: 'list_update',
+        data: [{ id: 'a', name: 'A', locationUpdateTime: 0 }],
+      }),
+    ).toBe(true)
+  })
+
+  it('rejects list_create with a listInfos entry missing a string id', () => {
+    expect(
+      isValidListAction({
+        action: 'list_create',
+        data: { position: 0, listInfos: [{ name: 'A' }] },
+      }),
+    ).toBe(false)
+  })
 })

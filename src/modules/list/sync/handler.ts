@@ -7,8 +7,12 @@ const handleListAction = async (
   payload: LX.Sync.List.ActionList,
 ): Promise<string | null> => {
   // Skip malformed payloads instead of letting a TypeError crash the sync
-  // handler (see REVIEW M3).
-  if (!isValidListAction(payload)) return null
+  // handler (see REVIEW M3). Warn so a false-negative in the validator is
+  // diagnosable rather than silently losing a client's change.
+  if (!isValidListAction(payload)) {
+    console.warn('dropping invalid list sync action:', payload)
+    return null
+  }
   const { action, data } = payload
   switch (action) {
     case 'list_data_overwrite':

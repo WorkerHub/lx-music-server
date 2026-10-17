@@ -10,6 +10,9 @@ const isArray = (v: unknown): v is unknown[] => Array.isArray(v)
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === 'string')
 
+const isUserListInfo = (v: unknown): v is LX.List.UserListInfo =>
+  isObject(v) && typeof v.id === 'string'
+
 const isMusicLocationType = (v: unknown): v is LX.AddMusicLocationType =>
   v === 'top' || v === 'bottom'
 
@@ -30,13 +33,16 @@ export const isValidListAction = (
     case 'list_create': {
       const d = action.data
       return (
-        isObject(d) && typeof d.position === 'number' && isArray(d.listInfos)
+        isObject(d) &&
+        typeof d.position === 'number' &&
+        isArray(d.listInfos) &&
+        d.listInfos.every(isUserListInfo)
       )
     }
     case 'list_remove':
       return isStringArray(action.data)
     case 'list_update':
-      return isArray(action.data)
+      return isArray(action.data) && action.data.every(isUserListInfo)
     case 'list_update_position': {
       const d = action.data
       return (

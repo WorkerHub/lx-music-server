@@ -7,8 +7,12 @@ const handleListAction = async (
   payload: LX.Sync.Dislike.ActionList,
 ): Promise<string | null> => {
   // Skip malformed payloads instead of letting a TypeError crash the sync
-  // handler (see REVIEW M3).
-  if (!isValidDislikeAction(payload)) return null
+  // handler (see REVIEW M3). Warn so a false-negative in the validator is
+  // diagnosable rather than silently losing a client's change.
+  if (!isValidDislikeAction(payload)) {
+    console.warn('dropping invalid dislike sync action:', payload)
+    return null
+  }
   switch (payload.action) {
     case 'dislike_data_overwrite':
       await global.event_dislike.dislike_data_overwrite(

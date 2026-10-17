@@ -15,7 +15,7 @@ const createStorage = () => {
       data.delete(key)
       return true
     },
-  } as unknown as DurableObjectStorage
+  } as DurableObjectStorage & { data: Map<string, unknown> }
 }
 
 const authText = (deviceName = 'dev') =>
@@ -87,5 +87,49 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
     )
 
     expect(resp.status).toBe(401)
+  })
+
+  it('re-authenticates a known device via clientId without a userName', async () => {
+    const users: LX.User[] = [{ name: 'alice', password: 'aaa' }]
+    const keyBytes = crypto.getRandomValues(new Uint8Array(16))
+    const key = btoa(String.fromCharCode(...keyBytes))
+    const clientId = 'client-1'
+    const deviceName = 'dev1'
+    const storage = createStorage()
+    storage.data.set('devices', {
+      userName: 'alice',
+      clients: {
+        [clientId]: {
+          clientId,
+          key,
+          deviceName,
+          isMobile: false,
+          lastConnectDate: 0,
+        },
+      },
+    })
+    let initPromise: Promise<void> = Promise.resolve()
+    const state = {
+      storage,
+      blockConcurrencyWhile: (fn: () => Promise<void>) => {
+        initPromise = fn()
+        return initPromise
+      },
+    } as unknown as DurableObjectState
+    const env = { LX_USERS: JSON.stringify(users) } as unknown as LX.Env
+
+    const doInstance = new UserSyncDO(state, env)
+    await initPromise
+
+    const encryptedMsg = aesEncrypt(`lx-music auth::${deviceName}`, key)
+    const resp = await doInstance.fetch(
+      new Request('https://do/auth', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ encryptedMsg, clientId, serverName: 'test' }),
+      }),
+    )
+
+    expect(resp.status).toBe(200)
   })
 })
