@@ -1,4 +1,6 @@
 import { Hono } from 'hono'
+import { toMD5 } from '@/utils/crypto'
+import { constantTimeEqual, resolveMD5 } from '@/utils/password'
 
 const app = new Hono<{ Bindings: LX.Env }>()
 
@@ -31,8 +33,18 @@ const basicAuth = (c: {
   const password = decoded.slice(sep + 1)
 
   const users = parseUsers(c.env.LX_USERS)
-  const user = users.find((u) => u.name === username && u.password === password)
-  return user ? user.name : null
+  // Compare MD5 digests (both sides normalized to fixed-length) in constant
+  // time so the stored password does not leak through timing. Supports both
+  // plaintext `password` and precomputed `passwordHash` storage.
+  const providedMD5 = toMD5(password)
+  let matched: string | null = null
+  for (const u of users) {
+    if (u.name !== username) continue
+    const storedMD5 = resolveMD5(u)
+    if (storedMD5 === null) continue
+    if (constantTimeEqual(providedMD5, storedMD5)) matched = u.name
+  }
+  return matched
 }
 
 app.get('/devices', async (c) => {

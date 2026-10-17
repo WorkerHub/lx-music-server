@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Inject users config
+      - name: Prepare config and secrets file
         env:
           KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
           LX_USERS: ${{ secrets.LX_USERS }}
@@ -34,17 +34,28 @@ jobs:
           # LX_USERS secret 格式:
           #   简单模式: user1:password1,user2:password2
           #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
+          #   JSON 模式也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
           python3 - <<'EOF'
           import os, json
 
+          # Inject the KV namespace id into wrangler.toml (config, not secret).
           kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "")
+          with open('wrangler.toml', 'r') as f:
+              content = f.read()
+          content = content.replace('KV_NAMESPACE_ID_PLACEHOLDER', kv_namespace_id)
+          with open('wrangler.toml', 'w') as f:
+              f.write(content)
+
+          # Build the LX_USERS secret value (a JSON array string) and write it to
+          # a secrets file that wrangler deploy uploads alongside the code. This
+          # keeps plaintext passwords out of wrangler.toml [vars], which are
+          # visible in the Cloudflare dashboard.
           raw = os.environ.get("LX_USERS", "")
           if not raw:
               users = []
           elif raw.startswith("["):
               users = json.loads(raw)
           else:
-              # user:password,user:password 格式
               users = []
               for pair in raw.split(","):
                   pair = pair.strip()
@@ -54,22 +65,15 @@ jobs:
                   users.append({"name": parts[0], "password": parts[1] if len(parts) > 1 else ""})
 
           users_json = json.dumps(users)
-
-          with open('wrangler.toml', 'r') as f:
-              content = f.read()
-
-          content = content.replace('KV_NAMESPACE_ID_PLACEHOLDER', kv_namespace_id)
-          content = content.replace('"LX_USERS_PLACEHOLDER"', json.dumps(users_json))
-
-          with open('wrangler.toml', 'w') as f:
-              f.write(content)
+          with open('.secrets.json', 'w') as f:
+              json.dump({"LX_USERS": users_json}, f)
           EOF
 
       - name: Deploy
         shell: bash
         run: |
           set -o pipefail
-          pnpm wrangler deploy 2>&1 | sed -E \
+          pnpm wrangler deploy --secrets-file .secrets.json 2>&1 | sed -E \
             -e 's/env\.LX_USERS \(".*"\)/env.LX_USERS (***)/g' \
             -e 's/env\.KV[^ ]* \([^)]*\)/env.KV (***)/g' \
             -e 's#https://([a-z0-9-]+)\.[a-z0-9-]+\.workers\.dev/?#https://\1.***.workers.dev/#gI'

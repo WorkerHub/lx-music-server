@@ -3,9 +3,14 @@ declare namespace LX {
 
   interface User {
     name: string
-    password: string
+    password?: string
+    passwordHash?: string
     maxSnapshotNum?: number
     'list.addMusicLocationType'?: AddMusicLocationType
+  }
+
+  interface RateLimiterBinding {
+    limit(options: { key: string }): Promise<{ success: boolean }>
   }
 
   interface Env {
@@ -13,5 +18,6 @@ declare namespace LX {
     KV: KVNamespace
     LX_USERS: string
     SERVER_NAME: string
+    RATE_LIMITER?: RateLimiterBinding
   }
 }

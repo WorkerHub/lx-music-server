@@ -17,7 +17,9 @@ Built for one goal: run multi-device sync without self-hosting servers.
 - [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
 - [Device Management API](#device-management-api)
+- [Security Notes](#security-notes)
 - [Local Development](#local-development)
+- [Migration](#migration)
 - [Architecture](#architecture)
 - [FAQ](#faq)
 - [License](#license)
@@ -67,7 +69,7 @@ Secrets:
 
 ### 4. Configure users (`LX_USERS`)
 
-Two input formats are supported.
+`LX_USERS` is delivered as a **Secret** (uploaded by GitHub Actions via `wrangler deploy --secrets-file`, no longer written to `wrangler.toml` `[vars]`, so it does not show up in plaintext in the Cloudflare dashboard variables list). Two input formats are supported.
 
 Simple format (comma-separated `username:password` pairs):
 
@@ -75,10 +77,10 @@ Simple format (comma-separated `username:password` pairs):
 admin:your_password,alice:her_password
 ```
 
-JSON format (with extra options):
+JSON format (with extra options and password-hash support):
 
 ```json
-[{"name":"admin","password":"your_password"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
+[{"name":"admin","passwordHash":"5f4dcc3b5aa765d61d8327deb882cf99"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
 ```
 
 Supported fields:
@@ -86,11 +88,23 @@ Supported fields:
 | Field | Type | Description |
 |---|---|---|
 | `name` | string | Username (required) |
-| `password` | string | Password (required) |
+| `password` | string | Plaintext password (mutually exclusive with `passwordHash`) |
+| `passwordHash` | string | 32-char hex MD5 of the password (recommended, see Security Notes) |
 | `maxSnapshotNum` | number | Max snapshot retention, default 20 |
 | `list.addMusicLocationType` | `"top"` \| `"bottom"` | Song insert position, default `"bottom"` |
 
-To add or update users, change `LX_USERS` only. No code change is needed.
+> **About `passwordHash`**: the auth protocol requires the server to hold `MD5(password)` in order to decrypt the client auth packet, so `passwordHash` must be an **unsalted MD5** (32 hex chars), not a salted hash. To generate it:
+>
+> ```bash
+> # macOS / Linux
+> printf 'your_password' | md5
+> # or with Node
+> node -e "console.log(require('crypto').createHash('md5').update('your_password').digest('hex'))"
+> ```
+>
+> Storing `passwordHash` keeps the plaintext password out of the Cloudflare dashboard, but it is still a password-equivalent derived value — anyone who obtains it can authenticate and sync as that user. Either way, always use a strong random password.
+
+To add or update users, change the `LX_USERS` Secret only. No code change is needed.
 
 ### 5. Trigger deployment
 
@@ -109,6 +123,12 @@ https://lx-music-server.<your-subdomain>.workers.dev
 You can also bind a custom domain at `Settings -> Domains & Routes -> Custom Domain`.
 
 Before migrating from another sync server, back up local client data first.
+
+### 7. Auth rate limiting
+
+The `/ah` auth endpoint has built-in IP rate limiting (10 requests / 60 s by default) backed by the Cloudflare Workers Rate Limiting binding (`RATE_LIMITER` in `wrangler.toml`). Its `namespace_id` must be unique within your Cloudflare account: if another Worker already uses `1001`, change it to an unused positive integer.
+
+> This limit is counted per Cloudflare location and is eventually consistent — enough to stop single-source brute force. For account-wide global limiting, add a Cloudflare WAF rate limiting rule on top.
 
 ## Client Configuration
 
@@ -133,6 +153,17 @@ Revoke a device:
 curl -u <username>:<password> -X DELETE https://<worker-url>/devices/<clientId>
 ```
 
+## Security Notes
+
+To stay fully compatible with existing LX Music clients, this server keeps the client's auth/sync protocol, which carries some protocol-level risks. Please be aware of them and mitigate accordingly:
+
+- **Always use a strong random password**: the auth key is derived from `MD5(password)` (unsalted, single MD5, first 16 hex chars as the AES key), so weak passwords are easy to brute force offline. Use a sufficiently long random password (16+ chars recommended) and prefer `passwordHash` so plaintext is not stored.
+- **Expose only to trusted networks**: auth and sync traffic is not fully authenticated/encrypted at the protocol level (sync messages are gzip-only, not encrypted with the device key). Bind a custom domain and restrict sources with Cloudflare Access / WAF, or use it only within a trusted network.
+- **WebSocket auth token travels in the URL query**: clients connect via `/socket?i=...&t=...`, so the token ends up in browser history, proxy logs and error reports. This is inherent to the upstream protocol; the server keeps it for compatibility. Avoid visiting the full tokenized URL on untrusted/shared devices.
+- **Device management API uses Basic Auth**: `/devices` uses the same username/password as sync; the password comparison is now constant-time, but you should still restrict its source (e.g. a WAF rule limiting IPs).
+
+These risks all stem from the "do not change the client protocol" constraint; the real fixes (salted KDF, AEAD encryption, token via first message) need client cooperation and are intentionally out of scope for server-only changes.
+
 ## Local Development
 
 ```bash
@@ -140,13 +171,34 @@ pnpm install
 pnpm dev
 ```
 
+`LX_USERS` is now a Secret, so for local development create a `.dev.vars` file (already git-ignored):
+
+```text
+LX_USERS=[{"name":"admin","password":"your_password"}]
+```
+
 `wrangler types` is integrated in scripts, so type definitions are generated before dev/deploy.
+
+Run tests:
+
+```bash
+pnpm test
+```
 
 Manual deploy:
 
 ```bash
 pnpm deploy
 ```
+
+## Migration
+
+This security hardening round changed some configuration and deployment behavior. When upgrading from an older version:
+
+1. **`LX_USERS` moved from `[vars]` to a Secret**: deployment no longer writes passwords into `wrangler.toml`; GitHub Actions now uploads them via `wrangler deploy --secrets-file`. Your existing `LX_USERS` GitHub Secret needs no change — just re-run the deployment. For local development, use the `.dev.vars` file above.
+2. **(Optional) migrate plaintext passwords to `passwordHash`**: replace `password` with `passwordHash` (32-char hex MD5) in `LX_USERS` so plaintext no longer appears in config. See "Configure users" for how to generate it. Both plaintext `password` and `passwordHash` remain supported.
+3. **New `RATE_LIMITER` binding**: `wrangler.toml` now declares the auth rate-limiting binding; its `namespace_id` must be unique in your account — change it before deploying if it collides with an existing Worker.
+4. **`SERVER_NAME` stays in `[vars]`**: this non-sensitive display name remains in `wrangler.toml` `[vars]` and can be viewed/edited in the dashboard.
 
 ## Architecture
 

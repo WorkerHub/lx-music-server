@@ -15,6 +15,16 @@ id = "KV_NAMESPACE_ID_PLACEHOLDER"
 tag = "v1"
 new_sqlite_classes = ["UserSyncDO"]
 
+# IP rate limiting for the /ah auth endpoint (see README "限流").
+# namespace_id must be a positive integer unique within your Cloudflare account.
+# Change it if another Worker/binding on your account already uses "1001".
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
 [vars]
-LX_USERS = "LX_USERS_PLACEHOLDER"
 SERVER_NAME = "LX Music Server"

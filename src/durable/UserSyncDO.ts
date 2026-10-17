@@ -11,8 +11,9 @@ import {
   getUserConfig,
   setUsersContext,
 } from '@/user/data'
-import { decryptMsg, encryptMsg } from '@/utils/compress'
-import { aesDecrypt, aesEncrypt, rsaEncrypt, toMD5 } from '@/utils/crypto'
+import { decryptMsg, encryptMsg, MAX_RAW_MESSAGE_SIZE } from '@/utils/compress'
+import { aesDecrypt, aesEncrypt, rsaEncrypt } from '@/utils/crypto'
+import { getKeySeed } from '@/utils/password'
 
 const DEFAULT_SNAPSHOT_INFO = {
   latest: null as string | null,
@@ -213,7 +214,9 @@ export class UserSyncDO implements DurableObject {
     // 新设备首次认证
     const users = this.getUsers()
     for (const userInfo of users) {
-      const key = btoa(toMD5(userInfo.password).substring(0, 16))
+      const keySeed = getKeySeed(userInfo)
+      if (!keySeed) continue
+      const key = btoa(keySeed)
       let text: string
       try {
         text = aesDecrypt(encryptedMsg, key)
@@ -422,6 +425,12 @@ export class UserSyncDO implements DurableObject {
 
     ws.addEventListener('message', (event) => {
       if (typeof event.data !== 'string') return
+      // Bound raw bytes before any base64/gzip work to stop oversized frames
+      // from inflating memory (see REVIEW H1).
+      if (event.data.length > MAX_RAW_MESSAGE_SIZE) {
+        ws.close(SYNC_CLOSE_CODE.failed)
+        return
+      }
       void decryptMsg(keyInfo, event.data)
         .then((data) => {
           let parsed: any
