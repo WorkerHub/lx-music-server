@@ -10,6 +10,10 @@ import { filterRules } from '../utils'
 const wait = (time = 1000) =>
   new Promise<void>((resolve) => setTimeout(resolve, time))
 
+// 同步互斥锁的最大等待时间（同 list 模块，REVIEW M7）。该计时从本模块 sync
+// 启动算起，不含更早的 getEnabledFeatures RPC（其超时同样约 120s）。
+const SYNC_LOCK_TIMEOUT_MS = 150 * 1000
+
 const getRemoteListData = async (
   socket: LX.Socket,
 ): Promise<LX.Dislike.DislikeRules> => {
@@ -284,9 +288,12 @@ export const sync = async (socket: LX.Socket) => {
     if (syncRef.current === socket.keyInfo.clientId) syncRef.current = null
   })
 
+  const startedAt = Date.now()
   while (true) {
     if (disconnected) throw new Error('disconnected')
     if (!syncRef.current) break
+    if (Date.now() - startedAt >= SYNC_LOCK_TIMEOUT_MS)
+      throw new Error('sync lock wait timeout')
     await wait()
   }
 

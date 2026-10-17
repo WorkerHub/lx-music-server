@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aesEncrypt } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
-import { UserSyncDO } from './UserSyncDO'
+import { isConnectionLimitReached, UserSyncDO } from './UserSyncDO'
 
 const createStorage = () => {
   const data = new Map<string, unknown>()
@@ -131,5 +131,86 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
     )
 
     expect(resp.status).toBe(200)
+  })
+})
+
+describe('handleGetDevices when userSpace is uninitialized (L6)', () => {
+  it('returns 503 with an error body instead of an empty list', async () => {
+    const storage = createStorage()
+    const state = {
+      storage,
+      // Never run initialize, leaving this.userSpace null.
+      blockConcurrencyWhile: () => {},
+    } as unknown as DurableObjectState
+    const env = {
+      LX_USERS: JSON.stringify([{ name: 'alice', password: 'pw' }]),
+    } as unknown as LX.Env
+
+    const doInstance = new UserSyncDO(state, env)
+    const resp = await doInstance.fetch(new Request('https://do/devices'))
+
+    expect(resp.status).toBe(503)
+    const body = (await resp.json()) as { error: string }
+    expect(body.error).toBe('user space not initialized')
+  })
+})
+
+describe('connection limit (M1)', () => {
+  it('rejects a new connection once the per-user limit is reached', () => {
+    expect(isConnectionLimitReached(20, false)).toBe(true)
+  })
+
+  it('allows a same-clientId reconnect even at the limit', () => {
+    expect(isConnectionLimitReached(20, true)).toBe(false)
+  })
+
+  it('allows connections below the limit', () => {
+    expect(isConnectionLimitReached(19, false)).toBe(false)
+  })
+})
+
+describe('ping interval lifecycle (M1)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('starts on mobile connect, pings only mobile, and stops when the last mobile leaves', () => {
+    vi.useFakeTimers({
+      toFake: ['setInterval', 'clearInterval', 'setTimeout', 'Date'],
+    })
+    const storage = createStorage()
+    const state = {
+      storage,
+      blockConcurrencyWhile: () => {},
+    } as unknown as DurableObjectState
+    const env = { LX_USERS: JSON.stringify([]) } as unknown as LX.Env
+    const doInstance = new UserSyncDO(state, env) as any
+
+    // 没有移动端连接时不启动定时器。
+    doInstance.startPingInterval()
+    expect(doInstance.pingInterval).toBeNull()
+
+    const sent: string[] = []
+    const mobile = {
+      keyInfo: { clientId: 'm', isMobile: true },
+      send: (data: string) => sent.push(data),
+    }
+    const desktop = {
+      keyInfo: { clientId: 'd', isMobile: false },
+      send: (data: string) => sent.push(data),
+    }
+    doInstance.sockets.add(mobile)
+    doInstance.sockets.add(desktop)
+    doInstance.startPingInterval()
+    expect(doInstance.pingInterval).not.toBeNull()
+
+    // 定时器 tick 只给移动端连接发 'ping'。
+    vi.advanceTimersByTime(30 * 1000)
+    expect(sent).toEqual(['ping'])
+
+    // 最后一个移动端连接断开后停止定时器。
+    doInstance.sockets.delete(mobile)
+    doInstance.stopPingIntervalIfNoMobile()
+    expect(doInstance.pingInterval).toBeNull()
   })
 })
