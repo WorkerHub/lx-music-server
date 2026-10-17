@@ -25,10 +25,7 @@ export class DislikeManage {
       userName,
       maxSnapshotNum,
     )
-    this.dislikeDataManage = new DislikeDataManage(
-      this.snapshotDataManage,
-      preloadedDislikeRules,
-    )
+    this.dislikeDataManage = new DislikeDataManage(preloadedDislikeRules)
   }
 
   createSnapshot = async () => {
@@ -42,7 +39,7 @@ export class DislikeManage {
     if (snapshotInfo.latest) snapshotInfo.list.unshift(snapshotInfo.latest)
     snapshotInfo.latest = md5
     snapshotInfo.time = Date.now()
-    this.snapshotDataManage.saveSnapshotInfo(snapshotInfo)
+    await this.snapshotDataManage.saveSnapshotInfo(snapshotInfo)
     return md5
   }
 

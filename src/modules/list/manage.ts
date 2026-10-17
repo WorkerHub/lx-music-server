@@ -25,10 +25,7 @@ export class ListManage {
       userName,
       maxSnapshotNum,
     )
-    this.listDataManage = new ListDataManage(
-      this.snapshotDataManage,
-      preloadedListData,
-    )
+    this.listDataManage = new ListDataManage(preloadedListData)
   }
 
   createSnapshot = async () => {
@@ -42,7 +39,7 @@ export class ListManage {
     if (snapshotInfo.latest) snapshotInfo.list.unshift(snapshotInfo.latest)
     snapshotInfo.latest = md5
     snapshotInfo.time = Date.now()
-    this.snapshotDataManage.saveSnapshotInfo(snapshotInfo)
+    await this.snapshotDataManage.saveSnapshotInfo(snapshotInfo)
     return md5
   }
 

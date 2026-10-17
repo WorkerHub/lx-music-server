@@ -78,7 +78,11 @@ app.get('/ah', async (c) => {
     const resp = await doStub.fetch('https://do/auth', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ encryptedMsg, serverName }),
+      body: JSON.stringify({
+        encryptedMsg,
+        serverName,
+        userName: userInfo.name,
+      }),
     })
     if (!resp.ok) {
       return c.text(SYNC_CODE.msgAuthFailed, 401)

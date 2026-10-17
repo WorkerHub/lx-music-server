@@ -1,10 +1,15 @@
 import { SYNC_CLOSE_CODE } from '@/constants'
 import { getUserSpace } from '@/user'
+import { isValidListAction } from '../validate'
 
 const handleListAction = async (
   userName: string,
-  { action, data }: LX.Sync.List.ActionList,
-) => {
+  payload: LX.Sync.List.ActionList,
+): Promise<string | null> => {
+  // Skip malformed payloads instead of letting a TypeError crash the sync
+  // handler (see REVIEW M3).
+  if (!isValidListAction(payload)) return null
+  const { action, data } = payload
   switch (action) {
     case 'list_data_overwrite':
       await global.event_list.list_data_overwrite(userName, data, true)
@@ -93,6 +98,7 @@ const handler: LX.Sync.ServerSyncHandlerListActions<LX.Socket> = {
   async onListSyncAction(socket, action) {
     if (!socket.moduleReadys?.list) return
     const key = await handleListAction(socket.userInfo.name, action)
+    if (key == null) return
     const userSpace = getUserSpace(socket.userInfo.name)
     await userSpace.listManage.updateDeviceSnapshotKey(
       socket.keyInfo.clientId,

@@ -12,8 +12,27 @@ export class SnapshotDataManage {
   private prefix: 'list' | 'dislike'
   private maxSnapshotNum: number
   snapshotInfo: SnapshotInfo
-  clientSnapshotKeys: Set<string>
+  // Reference count per snapshot key. Multiple devices can share the same
+  // snapshot key, so a plain Set would drop the protection the moment one
+  // device moves on — leaving the other device's snapshot free to be cleared
+  // (see REVIEW L3). A count only releases a key when every referrer is gone.
+  private clientSnapshotKeys = new Map<string, number>()
   private readonly saveSnapshotInfoThrottle: () => void
+
+  private incrementRef = (key: string) => {
+    if (!key) return
+    this.clientSnapshotKeys.set(
+      key,
+      (this.clientSnapshotKeys.get(key) ?? 0) + 1,
+    )
+  }
+
+  private decrementRef = (key: string) => {
+    if (!key) return
+    const count = (this.clientSnapshotKeys.get(key) ?? 0) - 1
+    if (count <= 0) this.clientSnapshotKeys.delete(key)
+    else this.clientSnapshotKeys.set(key, count)
+  }
 
   isIncludesDevice = (key: string) => {
     return this.clientSnapshotKeys.has(key)
@@ -24,15 +43,16 @@ export class SnapshotDataManage {
     const snapshotList = this.snapshotInfo.list.filter(
       (key) => !this.isIncludesDevice(key),
     )
-    const requiredSave = snapshotList.length > this.maxSnapshotNum
-    while (snapshotList.length > this.maxSnapshotNum) {
-      const name = snapshotList.pop()
-      if (name) {
-        await this.removeSnapshot(name)
-        this.snapshotInfo.list.splice(this.snapshotInfo.list.indexOf(name), 1)
-      } else break
+    if (snapshotList.length <= this.maxSnapshotNum) return
+    // `list` is ordered newest-first, so everything past the first
+    // `maxSnapshotNum` entries is the oldest and safe to remove.
+    for (const name of snapshotList.slice(this.maxSnapshotNum)) {
+      await this.removeSnapshot(name)
+      const index = this.snapshotInfo.list.indexOf(name)
+      if (index >= 0) this.snapshotInfo.list.splice(index, 1)
     }
-    if (requiredSave) this.saveSnapshotInfo(this.snapshotInfo)
+    // The pruned index is critical — persist it directly (not throttled).
+    await this.persistSnapshotInfo()
   }
 
   updateDeviceSnapshotKey = async (clientId: string, key: string) => {
@@ -42,10 +62,10 @@ export class SnapshotDataManage {
         snapshotKey: '',
         lastSyncDate: 0,
       }
-    if (client.snapshotKey) this.clientSnapshotKeys.delete(client.snapshotKey)
+    if (client.snapshotKey) this.decrementRef(client.snapshotKey)
     client.snapshotKey = key
     client.lastSyncDate = Date.now()
-    this.clientSnapshotKeys.add(key)
+    this.incrementRef(key)
     this.saveSnapshotInfoThrottle()
   }
 
@@ -58,15 +78,19 @@ export class SnapshotDataManage {
     return this.snapshotInfo
   }
 
-  saveSnapshotInfo = (info: SnapshotInfo) => {
+  // Critical path: called right after a snapshot is created. The snapshot
+  // index (latest/list/time) must survive a DO eviction, so it is written
+  // directly and awaited instead of relying on the throttle timer (REVIEW M2).
+  saveSnapshotInfo = async (info: SnapshotInfo) => {
     this.snapshotInfo = info
-    this.saveSnapshotInfoThrottle()
+    await this.persistSnapshotInfo()
+    await this.clearOldSnapshot()
   }
 
   removeSnapshotInfo = (clientId: string) => {
     const client = this.snapshotInfo.clients[clientId]
     if (!client) return
-    if (client.snapshotKey) this.clientSnapshotKeys.delete(client.snapshotKey)
+    if (client.snapshotKey) this.decrementRef(client.snapshotKey)
     // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete this.snapshotInfo.clients[clientId]
     this.saveSnapshotInfoThrottle()
@@ -92,8 +116,12 @@ export class SnapshotDataManage {
     await this.storage.delete(`${this.prefix}:snap:${name}`)
   }
 
-  flush = async (): Promise<void> => {
+  persistSnapshotInfo = async (): Promise<void> => {
     await this.storage.put(`${this.prefix}:snapshotInfo`, this.snapshotInfo)
+  }
+
+  flush = async (): Promise<void> => {
+    await this.persistSnapshotInfo()
   }
 
   constructor(
@@ -108,19 +136,19 @@ export class SnapshotDataManage {
     this.maxSnapshotNum = maxSnapshotNum
     this.snapshotInfo = preloadedSnapshotInfo
 
+    // Throttle only the non-critical per-device tracking (snapshotKey /
+    // lastSyncDate). The snapshot index itself is persisted eagerly in
+    // `saveSnapshotInfo`.
     this.saveSnapshotInfoThrottle = throttle(() => {
-      void this.storage
-        .put(`${this.prefix}:snapshotInfo`, this.snapshotInfo)
+      void this.persistSnapshotInfo()
         .then(() => {
           return this.clearOldSnapshot()
         })
         .catch((err) => console.error(err))
     })
 
-    this.clientSnapshotKeys = new Set(
-      Object.values(this.snapshotInfo.clients)
-        .map((device) => device.snapshotKey)
-        .filter((k) => k),
-    )
+    for (const device of Object.values(this.snapshotInfo.clients)) {
+      if (device.snapshotKey) this.incrementRef(device.snapshotKey)
+    }
   }
 }

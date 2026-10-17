@@ -1,20 +1,24 @@
 import { SYNC_CLOSE_CODE } from '@/constants'
 import { getUserSpace } from '@/user'
+import { isValidDislikeAction } from '../validate'
 
 const handleListAction = async (
   userName: string,
-  param: LX.Sync.Dislike.ActionList,
-) => {
-  switch (param.action) {
+  payload: LX.Sync.Dislike.ActionList,
+): Promise<string | null> => {
+  // Skip malformed payloads instead of letting a TypeError crash the sync
+  // handler (see REVIEW M3).
+  if (!isValidDislikeAction(payload)) return null
+  switch (payload.action) {
     case 'dislike_data_overwrite':
       await global.event_dislike.dislike_data_overwrite(
         userName,
-        param.data,
+        payload.data,
         true,
       )
       break
     case 'dislike_music_add':
-      await global.event_dislike.dislike_music_add(userName, param.data, true)
+      await global.event_dislike.dislike_music_add(userName, payload.data, true)
       break
     case 'dislike_music_clear':
       await global.event_dislike.dislike_music_clear(userName, true)
@@ -31,6 +35,7 @@ const handler: LX.Sync.ServerSyncHandlerDislikeActions<LX.Socket> = {
   async onDislikeSyncAction(socket, action) {
     if (!socket.moduleReadys?.dislike) return
     const key = await handleListAction(socket.userInfo.name, action)
+    if (key == null) return
     const userSpace = getUserSpace(socket.userInfo.name)
     await userSpace.dislikeManage.updateDeviceSnapshotKey(
       socket.keyInfo.clientId,
