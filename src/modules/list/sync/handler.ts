@@ -14,12 +14,13 @@ const handleListAction = async (
     return null
   }
   const { action, data } = payload
+  const userSpace = getUserSpace(userName)
   switch (action) {
     case 'list_data_overwrite':
-      await global.event_list.list_data_overwrite(userName, data, true)
+      await userSpace.listEvent.list_data_overwrite(userName, data, true)
       break
     case 'list_create':
-      await global.event_list.list_create(
+      await userSpace.listEvent.list_create(
         userName,
         data.position,
         data.listInfos,
@@ -27,13 +28,13 @@ const handleListAction = async (
       )
       break
     case 'list_remove':
-      await global.event_list.list_remove(userName, data, true)
+      await userSpace.listEvent.list_remove(userName, data, true)
       break
     case 'list_update':
-      await global.event_list.list_update(userName, data, true)
+      await userSpace.listEvent.list_update(userName, data, true)
       break
     case 'list_update_position':
-      await global.event_list.list_update_position(
+      await userSpace.listEvent.list_update_position(
         userName,
         data.position,
         data.ids,
@@ -41,7 +42,7 @@ const handleListAction = async (
       )
       break
     case 'list_music_add':
-      await global.event_list.list_music_add(
+      await userSpace.listEvent.list_music_add(
         userName,
         data.id,
         data.musicInfos,
@@ -50,7 +51,7 @@ const handleListAction = async (
       )
       break
     case 'list_music_move':
-      await global.event_list.list_music_move(
+      await userSpace.listEvent.list_music_move(
         userName,
         data.fromId,
         data.toId,
@@ -60,7 +61,7 @@ const handleListAction = async (
       )
       break
     case 'list_music_remove':
-      await global.event_list.list_music_remove(
+      await userSpace.listEvent.list_music_remove(
         userName,
         data.listId,
         data.ids,
@@ -68,10 +69,10 @@ const handleListAction = async (
       )
       break
     case 'list_music_update':
-      await global.event_list.list_music_update(userName, data, true)
+      await userSpace.listEvent.list_music_update(userName, data, true)
       break
     case 'list_music_update_position':
-      await global.event_list.list_music_update_position(
+      await userSpace.listEvent.list_music_update_position(
         userName,
         data.listId,
         data.position,
@@ -80,7 +81,7 @@ const handleListAction = async (
       )
       break
     case 'list_music_overwrite':
-      await global.event_list.list_music_overwrite(
+      await userSpace.listEvent.list_music_overwrite(
         userName,
         data.listId,
         data.musicInfos,
@@ -88,12 +89,11 @@ const handleListAction = async (
       )
       break
     case 'list_music_clear':
-      await global.event_list.list_music_clear(userName, data, true)
+      await userSpace.listEvent.list_music_clear(userName, data, true)
       break
     default:
       throw new Error('unknown list sync action')
   }
-  const userSpace = getUserSpace(userName)
   const key = await userSpace.listManage.createSnapshot()
   return key
 }

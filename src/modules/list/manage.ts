@@ -1,29 +1,23 @@
 import { toMD5 } from '@/utils'
+import { SnapshotDataManage, type SnapshotInfo } from '../snapshotDataManage'
 import { ListDataManage } from './listDataManage'
-import { SnapshotDataManage } from './snapshotDataManage'
 
 export class ListManage {
-  snapshotDataManage: SnapshotDataManage
+  snapshotDataManage: SnapshotDataManage<LX.Sync.List.ListData>
   listDataManage: ListDataManage
 
   constructor(
     storage: DurableObjectStorage,
-    preloadedSnapshotInfo: {
-      latest: string | null
-      time: number
-      list: string[]
-      clients: Record<string, LX.Sync.List.ListInfo>
-    },
+    preloadedSnapshotInfo: SnapshotInfo,
     preloadedListData: LX.Sync.List.ListData,
-    userName: string,
     maxSnapshotNum: number,
   ) {
     this.snapshotDataManage = new SnapshotDataManage(
       storage,
       'list',
       preloadedSnapshotInfo,
-      userName,
       maxSnapshotNum,
+      (data) => JSON.parse(data) as LX.Sync.List.ListData,
     )
     this.listDataManage = new ListDataManage(preloadedListData)
   }

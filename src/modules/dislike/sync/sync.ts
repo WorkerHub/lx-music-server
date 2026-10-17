@@ -44,12 +44,12 @@ const setLocalList = async (
   socket: LX.Socket,
   listData: LX.Dislike.DislikeRules,
 ) => {
-  await global.event_dislike.dislike_data_overwrite(
+  const userSpace = getUserSpace(socket.userInfo.name)
+  await userSpace.dislikeEvent.dislike_data_overwrite(
     socket.userInfo.name,
     listData,
     true,
   )
-  const userSpace = getUserSpace(socket.userInfo.name)
   return await userSpace.dislikeManage.createSnapshot()
 }
 
@@ -102,7 +102,7 @@ const setRemotelList = async (
   )
 }
 
-const mergeList = (
+export const mergeList = (
   _socket: LX.Socket,
   sourceListData: LX.Dislike.DislikeRules,
   targetListData: LX.Dislike.DislikeRules,
@@ -191,7 +191,7 @@ const handleSyncList = async (socket: LX.Socket) => {
   }
 }
 
-const mergeDataFromSnapshot = (
+export const mergeDataFromSnapshot = (
   sourceList: LX.Dislike.DislikeRules,
   targetList: LX.Dislike.DislikeRules,
   snapshotList: LX.Dislike.DislikeRules,

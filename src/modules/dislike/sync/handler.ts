@@ -13,24 +13,28 @@ const handleListAction = async (
     console.warn('dropping invalid dislike sync action:', payload)
     return null
   }
+  const userSpace = getUserSpace(userName)
   switch (payload.action) {
     case 'dislike_data_overwrite':
-      await global.event_dislike.dislike_data_overwrite(
+      await userSpace.dislikeEvent.dislike_data_overwrite(
         userName,
         payload.data,
         true,
       )
       break
     case 'dislike_music_add':
-      await global.event_dislike.dislike_music_add(userName, payload.data, true)
+      await userSpace.dislikeEvent.dislike_music_add(
+        userName,
+        payload.data,
+        true,
+      )
       break
     case 'dislike_music_clear':
-      await global.event_dislike.dislike_music_clear(userName, true)
+      await userSpace.dislikeEvent.dislike_music_clear(userName, true)
       break
     default:
       throw new Error('unknown dislike sync action')
   }
-  const userSpace = getUserSpace(userName)
   const key = await userSpace.dislikeManage.createSnapshot()
   return key
 }

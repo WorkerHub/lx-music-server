@@ -1,13 +1,24 @@
 import { throttle } from '@/utils/common'
 
-interface SnapshotInfo {
+// A snapshot entry tracked per device. The list and dislike snapshot managers
+// were near-identical (REVIEW L4); the only real difference is the type of the
+// snapshot payload they store. `LX.Sync.List.ListInfo` and
+// `LX.Sync.Dislike.ListInfo` are structurally identical, so this file models
+// them with a single `SnapshotListInfo` and makes the class generic over the
+// stored payload `TData` instead of duplicating the whole manager per feature.
+export interface SnapshotListInfo {
+  lastSyncDate?: number
+  snapshotKey: string
+}
+
+export interface SnapshotInfo {
   latest: string | null
   time: number
   list: string[]
-  clients: Record<string, LX.Sync.Dislike.ListInfo>
+  clients: Record<string, SnapshotListInfo>
 }
 
-export class SnapshotDataManage {
+export class SnapshotDataManage<TData> {
   private storage: DurableObjectStorage
   private prefix: 'list' | 'dislike'
   private maxSnapshotNum: number
@@ -18,6 +29,9 @@ export class SnapshotDataManage {
   // (see REVIEW L3). A count only releases a key when every referrer is gone.
   private clientSnapshotKeys = new Map<string, number>()
   private readonly saveSnapshotInfoThrottle: () => void
+  // Converts the serialized payload (a JSON string for list snapshots, the raw
+  // rules string for dislike) into the value actually stored in DO storage.
+  private readonly parseSnapshotData: (data: string) => TData
 
   private incrementRef = (key: string) => {
     if (!key) return
@@ -99,11 +113,9 @@ export class SnapshotDataManage {
     this.saveSnapshotInfoThrottle()
   }
 
-  getSnapshot = async (
-    name: string,
-  ): Promise<LX.Dislike.DislikeRules | null> => {
+  getSnapshot = async (name: string): Promise<TData | null> => {
     try {
-      const data = await this.storage.get<string>(`${this.prefix}:snap:${name}`)
+      const data = await this.storage.get<TData>(`${this.prefix}:snap:${name}`)
       return data ?? null
     } catch (err) {
       console.error(err)
@@ -112,7 +124,10 @@ export class SnapshotDataManage {
   }
 
   saveSnapshot = async (name: string, data: string) => {
-    await this.storage.put(`${this.prefix}:snap:${name}`, data)
+    await this.storage.put(
+      `${this.prefix}:snap:${name}`,
+      this.parseSnapshotData(data),
+    )
   }
 
   removeSnapshot = async (name: string) => {
@@ -131,13 +146,14 @@ export class SnapshotDataManage {
     storage: DurableObjectStorage,
     prefix: 'list' | 'dislike',
     preloadedSnapshotInfo: SnapshotInfo,
-    _userName: string,
     maxSnapshotNum: number,
+    parseSnapshotData: (data: string) => TData,
   ) {
     this.storage = storage
     this.prefix = prefix
     this.maxSnapshotNum = maxSnapshotNum
     this.snapshotInfo = preloadedSnapshotInfo
+    this.parseSnapshotData = parseSnapshotData
 
     // Only device removal is throttled now. Its write can only over-protect a
     // snapshot if lost (the stale entry still references the key), never drop

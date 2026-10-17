@@ -1,29 +1,23 @@
 import { toMD5 } from '@/utils'
+import { SnapshotDataManage, type SnapshotInfo } from '../snapshotDataManage'
 import { DislikeDataManage } from './dislikeDataManage'
-import { SnapshotDataManage } from './snapshotDataManage'
 
 export class DislikeManage {
-  snapshotDataManage: SnapshotDataManage
+  snapshotDataManage: SnapshotDataManage<LX.Dislike.DislikeRules>
   dislikeDataManage: DislikeDataManage
 
   constructor(
     storage: DurableObjectStorage,
-    preloadedSnapshotInfo: {
-      latest: string | null
-      time: number
-      list: string[]
-      clients: Record<string, LX.Sync.Dislike.ListInfo>
-    },
+    preloadedSnapshotInfo: SnapshotInfo,
     preloadedDislikeRules: LX.Dislike.DislikeRules,
-    userName: string,
     maxSnapshotNum: number,
   ) {
     this.snapshotDataManage = new SnapshotDataManage(
       storage,
       'dislike',
       preloadedSnapshotInfo,
-      userName,
       maxSnapshotNum,
+      (data) => data,
     )
     this.dislikeDataManage = new DislikeDataManage(preloadedDislikeRules)
   }
