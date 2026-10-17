@@ -11,7 +11,7 @@ import {
   getUserConfig,
   setUsersContext,
 } from '@/user/data'
-import { decryptMsg, encryptMsg, MAX_RAW_MESSAGE_SIZE } from '@/utils/compress'
+import { decryptMsg, encryptMsg, isRawMessageTooLarge } from '@/utils/compress'
 import { aesDecrypt, aesEncrypt, rsaEncrypt } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 
@@ -427,7 +427,7 @@ export class UserSyncDO implements DurableObject {
       if (typeof event.data !== 'string') return
       // Bound raw bytes before any base64/gzip work to stop oversized frames
       // from inflating memory (see REVIEW H1).
-      if (event.data.length > MAX_RAW_MESSAGE_SIZE) {
+      if (isRawMessageTooLarge(event.data)) {
         ws.close(SYNC_CLOSE_CODE.failed)
         return
       }

@@ -5,6 +5,11 @@ export const MAX_DECOMPRESSED_SIZE = 16 * 1024 * 1024
 // Raw cap applied at the WebSocket message entry, before any base64/gzip work.
 export const MAX_RAW_MESSAGE_SIZE = 16 * 1024 * 1024
 
+// Guard applied at the WebSocket message entry: reject frames whose raw string
+// length exceeds the cap before any base64/gzip processing.
+export const isRawMessageTooLarge = (data: string): boolean =>
+  data.length > MAX_RAW_MESSAGE_SIZE
+
 export class PayloadTooLargeError extends Error {
   constructor(message: string) {
     super(message)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   decryptMsg,
+  isRawMessageTooLarge,
   MAX_RAW_MESSAGE_SIZE,
   PayloadTooLargeError,
   unGzip,
@@ -59,6 +60,22 @@ describe('decryptMsg', () => {
 
   it('passes through uncompressed messages', async () => {
     expect(await decryptMsg(null, 'plain')).toBe('plain')
+  })
+
+  it('decompresses a large playlist-sized payload without false rejection', async () => {
+    const payload = JSON.stringify({ songs: 'a'.repeat(1024 * 1024) })
+    expect(await decryptMsg(null, `cg_${await gzipBase64(payload)}`)).toBe(
+      payload,
+    )
+  })
+})
+
+describe('isRawMessageTooLarge', () => {
+  it('allows a raw message at the cap and rejects one just over it', () => {
+    expect(isRawMessageTooLarge('a'.repeat(MAX_RAW_MESSAGE_SIZE))).toBe(false)
+    expect(isRawMessageTooLarge('a'.repeat(MAX_RAW_MESSAGE_SIZE + 1))).toBe(
+      true,
+    )
   })
 })
 

@@ -18,6 +18,8 @@ new_sqlite_classes = ["UserSyncDO"]
 # IP rate limiting for the /ah auth endpoint (see README "限流").
 # namespace_id must be a positive integer unique within your Cloudflare account.
 # Change it if another Worker/binding on your account already uses "1001".
+# A namespace_id conflict surfaces as a deploy error; check your existing
+# Workers rate-limit bindings in the Cloudflare dashboard and pick an unused id.
 [[ratelimits]]
 name = "RATE_LIMITER"
 namespace_id = "1001"

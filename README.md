@@ -171,10 +171,10 @@ pnpm install
 pnpm dev
 ```
 
-`LX_USERS` 现在是 Secret，本地开发时请创建 `.dev.vars` 文件（已在 `.gitignore` 中忽略）：
+`LX_USERS` 现在是 Secret，本地开发时请创建 `.dev.vars` 文件（已在 `.gitignore` 中忽略），写入以下内容（注意：这是**文件内容**，不是 shell 命令）：
 
 ```text
-LX_USERS=[{"name":"admin","password":"your_password"}]
+LX_USERS='[{"name":"admin","password":"your_password"}]'
 ```
 
 项目已将 `wrangler types` 集成到脚本中，开发和部署前会自动生成类型定义。

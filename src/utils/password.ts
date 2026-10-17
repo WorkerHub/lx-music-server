@@ -38,9 +38,10 @@ export const getKeySeed = (user: LX.User): string | null => {
 }
 
 /**
- * Constant-time string equality, immune to timing side channels.
- * Compares up to the longer length so neither content nor length leaks through
- * early exit (we only use it for fixed-length MD5 hex, but keep it general).
+ * Constant-time string equality. The loop always runs max(a.length, b.length)
+ * iterations, so content cannot leak through early exit. Intended for
+ * fixed-length MD5 hex digests (both sides are always 32 chars), where any
+ * length difference is a protocol invariant rather than a timing signal.
  */
 export const constantTimeEqual = (a: string, b: string): boolean => {
   const maxLen = Math.max(a.length, b.length)

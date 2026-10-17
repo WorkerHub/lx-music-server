@@ -171,10 +171,10 @@ pnpm install
 pnpm dev
 ```
 
-`LX_USERS` is now a Secret, so for local development create a `.dev.vars` file (already git-ignored):
+`LX_USERS` is now a Secret, so for local development create a `.dev.vars` file (already git-ignored) with this content (note: this is the **file content**, not a shell command):
 
 ```text
-LX_USERS=[{"name":"admin","password":"your_password"}]
+LX_USERS='[{"name":"admin","password":"your_password"}]'
 ```
 
 `wrangler types` is integrated in scripts, so type definitions are generated before dev/deploy.
