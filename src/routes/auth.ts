@@ -47,6 +47,9 @@ app.get('/ah', async (c) => {
   if (clientId) {
     const userName = await kv.get(`client:${clientId}`)
     if (!userName) {
+      // 映射已过期（30 天 TTL）或被删除：客户端始终带 i 头、且不会自动回退到
+      // 首次认证，这里只能返回 401。用户需在客户端重新输入密码走首次认证重新
+      // 配对（会生成新的 clientId）。这是个人同步服务下可接受的权衡（REVIEW M5）。
       return c.text(SYNC_CODE.msgAuthFailed, 401)
     }
 

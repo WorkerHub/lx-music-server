@@ -10,7 +10,8 @@ import { filterRules } from '../utils'
 const wait = (time = 1000) =>
   new Promise<void>((resolve) => setTimeout(resolve, time))
 
-// 同步互斥锁的最大等待时间（同 list 模块，REVIEW M7）。
+// 同步互斥锁的最大等待时间（同 list 模块，REVIEW M7）。该计时从本模块 sync
+// 启动算起，不含更早的 getEnabledFeatures RPC（其超时同样约 120s）。
 const SYNC_LOCK_TIMEOUT_MS = 150 * 1000
 
 const getRemoteListData = async (

@@ -186,7 +186,15 @@ export class UserSyncDO implements DurableObject {
   }
 
   private async handleRemoveDevice(clientId: string): Promise<Response> {
-    if (!this.userSpace) return new Response(null, { status: 404 })
+    // 与 handleGetDevices 保持一致：DO 未初始化时返回 503 而非 404（REVIEW L6）。
+    if (!this.userSpace)
+      return new Response(
+        JSON.stringify({ error: 'user space not initialized' }),
+        {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        },
+      )
     // kick off live WebSocket if connected
     for (const socket of this.sockets) {
       if (socket.keyInfo.clientId === clientId) {
@@ -344,7 +352,11 @@ export class UserSyncDO implements DurableObject {
     if (isConnectionLimitReached(this.sockets.size, hasExistingConnection)) {
       const [rejectClient, rejectServer] = Object.values(new WebSocketPair())
       rejectServer.accept()
-      // 用 SYNC_CLOSE_CODE.failed 关闭，客户端不会反复重连。
+      // 返回 101 会让客户端的 open 事件触发并清掉其 2 分钟 connectTimeout，
+      // 随后再收到 4100 关闭帧。桌面/移动客户端的 close 处理对 1000/4100 都直接
+      // return，因此不会进入重连循环、也不会弹窗；但没有 finished() RPC 回调，
+      // 客户端会停留在上一次成功同步留下的（可能已过期）状态文案上。受“客户端
+      // 协议不可修改”约束，4100 是可用关闭码里最接近“主动拒绝且不重连”的选择。
       rejectServer.close(SYNC_CLOSE_CODE.failed, 'too many connections')
       return new Response(null, { status: 101, webSocket: rejectClient })
     }
@@ -401,6 +413,12 @@ export class UserSyncDO implements DurableObject {
       if (socket.keyInfo.isMobile) return true
     }
     return false
+  }
+
+  private stopPingIntervalIfNoMobile() {
+    if (this.hasMobileConnection || this.pingInterval === null) return
+    clearInterval(this.pingInterval)
+    this.pingInterval = null
   }
 
   private createSocket(
@@ -494,10 +512,7 @@ export class UserSyncDO implements DurableObject {
       msg2call.destroy()
       this.sockets.delete(socket)
       // 没有移动端连接时停止 ping 定时器；没有连接时再 flush 延迟写。
-      if (!this.hasMobileConnection && this.pingInterval !== null) {
-        clearInterval(this.pingInterval)
-        this.pingInterval = null
-      }
+      this.stopPingIntervalIfNoMobile()
       if (this.sockets.size === 0) {
         // Flush any throttle-deferred snapshot writes before DO may hibernate
         void this.userSpace?.flush()

@@ -11,7 +11,8 @@ const wait = (time = 1000) =>
   new Promise<void>((resolve) => setTimeout(resolve, time))
 
 // 同步互斥锁的最大等待时间。前一个同步若卡住（msg2call 超时约 120s 才解除），
-// 后到的同用户同步最多再等这么久，超过即抛错释放 DO 时间片（REVIEW M7）。
+// 后到的同用户同步在拿到锁之前最多轮询这么久，超过即抛错释放 DO 时间片（REVIEW M7）。
+// 该计时从本模块 sync 启动算起，不含更早的 getEnabledFeatures RPC（其超时同样约 120s）。
 const SYNC_LOCK_TIMEOUT_MS = 150 * 1000
 
 const patchListData = (
