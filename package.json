@@ -6,6 +6,7 @@
     "dev": "wrangler types && wrangler dev",
     "deploy": "wrangler types && wrangler deploy",
     "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run",
     "lint": "biome ci src package.json pnpm-lock.yaml biome.json .github/workflows/*.yml",
     "format:check": "biome ci --linter-enabled=false src package.json pnpm-lock.yaml biome.json .github/workflows/*.yml",
     "cf-typegen": "wrangler types"
@@ -20,6 +21,7 @@
     "@biomejs/biome": "^2.5.0",
     "@types/node": "^25.9.4",
     "typescript": "^7.0.0",
+    "vitest": "^3.2.4",
     "wrangler": "^4.102.0"
   },
   "packageManager": "pnpm@12.5.1"

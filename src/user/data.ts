@@ -15,13 +15,17 @@ export const setUsersContext = (
   _defaultMaxSnapshotNum = defaultMaxSnapshotNum
 }
 
-export const getUserConfig = (userName: string): Required<LX.User> => {
+export interface UserConfig {
+  maxSnapshotNum: number
+  'list.addMusicLocationType': LX.AddMusicLocationType
+}
+
+export const getUserConfig = (userName: string): UserConfig => {
   const user = _users.find((u) => u.name === userName)
   if (!user) throw new Error(`user not found: ${userName}`)
   return {
-    maxSnapshotNum: _defaultMaxSnapshotNum,
-    'list.addMusicLocationType': 'bottom',
-    ...user,
+    maxSnapshotNum: user.maxSnapshotNum ?? _defaultMaxSnapshotNum,
+    'list.addMusicLocationType': user['list.addMusicLocationType'] ?? 'bottom',
   }
 }
 
