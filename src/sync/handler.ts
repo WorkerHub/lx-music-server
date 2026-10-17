@@ -8,7 +8,7 @@ const handler: LX.Sync.ServerSyncHandlerActions<LX.Socket> = {
     for (const name of FeaturesList) {
       const newStatus = feature[name]
       if (newStatus == null) continue
-      beforeFeature[name] = feature[name]
+      beforeFeature[name] = newStatus
       socket.moduleReadys[name] = false
       if (feature[name]) {
         try {

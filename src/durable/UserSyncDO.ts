@@ -1,9 +1,5 @@
 import { createMsg2call } from 'message2call'
 import { SYNC_CLOSE_CODE, SYNC_CODE } from '@/constants'
-import type { DislikeEventType } from '@/modules/dislike/event'
-import { DislikeEvent } from '@/modules/dislike/event'
-import type { ListEventType } from '@/modules/list/event'
-import { ListEvent } from '@/modules/list/event'
 import { callObj, sync } from '@/sync'
 import { createUserSpace, setUserSpace, type UserSpace } from '@/user'
 import {
@@ -121,15 +117,10 @@ export class UserSyncDO implements DurableObject {
       listData,
       dislikeSnapshotInfo,
       dislikeRules,
-      userName,
       maxSnapshotNum,
     )
     this.userSpace = userSpace
     setUserSpace(userName, userSpace)
-
-    if (!global.event_list) global.event_list = new ListEvent() as ListEventType
-    if (!global.event_dislike)
-      global.event_dislike = new DislikeEvent() as DislikeEventType
   }
 
   private async initialize() {
@@ -456,9 +447,11 @@ export class UserSyncDO implements DurableObject {
       moduleReadys: { list: false, dislike: false },
       feature: { list: false, dislike: false },
       syncRefs: { list: this.listSyncRef, dislike: this.dislikeSyncRef },
-      remote: msg2call.remote as any,
-      remoteQueueList: msg2call.createQueueRemote('list') as any,
-      remoteQueueDislike: msg2call.createQueueRemote('dislike') as any,
+      remote: msg2call.remote,
+      remoteQueueList:
+        msg2call.createQueueRemote<LX.Sync.ClientSyncListActions>('list'),
+      remoteQueueDislike:
+        msg2call.createQueueRemote<LX.Sync.ClientSyncDislikeActions>('dislike'),
       broadcast: (handler) => {
         for (const s of this.sockets) handler(s)
       },

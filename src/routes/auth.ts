@@ -7,11 +7,13 @@ import { isRateLimited } from '@/utils/rateLimit'
 const app = new Hono<{ Bindings: LX.Env }>()
 
 const getIP = (c: { req: { raw: Request } }) => {
-  return (
-    c.req.raw.headers.get('cf-connecting-ip') ??
-    c.req.raw.headers.get('x-forwarded-for') ??
-    'unknown'
-  )
+  // Cloudflare always sets cf-connecting-ip on edge traffic; it is the only
+  // header we trust for rate limiting. x-forwarded-for is removed because a
+  // client can spoof it to rotate rate-limit buckets (REVIEW L1). In local
+  // `wrangler dev` the header is absent and every request keys on "unknown",
+  // which is acceptable because the dev fallback limiter is in-memory and
+  // per-machine anyway.
+  return c.req.raw.headers.get('cf-connecting-ip') ?? 'unknown'
 }
 
 const parseUsers = (raw: string): LX.User[] | null => {

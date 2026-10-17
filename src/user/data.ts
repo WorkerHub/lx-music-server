@@ -3,7 +3,12 @@ export interface DevicesInfo {
   clients: Record<string, LX.Sync.KeyInfo>
 }
 
-// 模块级别的上下文（由 UserSyncDO 在初始化时设置）
+// Module-level user context, written only by `setUsersContext` from the DO's
+// `loadAndInit` path (REVIEW M6). It holds the whole LX_USERS roster plus the
+// default snapshot cap, so `getUserConfig` can resolve a single user's config
+// without a UserSpace. Constraint: every DO init rewrites it before any sync
+// runs, and reads never escape the isolate, so it is safe as long as no code
+// caches a `getUserConfig` result across an init.
 let _users: LX.User[] = []
 let _defaultMaxSnapshotNum = 10
 

@@ -58,12 +58,12 @@ const setLocalList = async (
   socket: LX.Socket,
   listData: LX.Sync.List.ListData,
 ) => {
-  await global.event_list.list_data_overwrite(
+  const userSpace = getUserSpace(socket.userInfo.name)
+  await userSpace.listEvent.list_data_overwrite(
     socket.userInfo.name,
     listData,
     true,
   )
-  const userSpace = getUserSpace(socket.userInfo.name)
   return await userSpace.listManage.createSnapshot()
 }
 
@@ -154,7 +154,7 @@ const handleMergeList = (
   }
   return ids.map((id) => map.get(id)) as LX.Music.MusicInfo[]
 }
-const mergeList = (
+export const mergeList = (
   socket: LX.Socket,
   sourceListData: LX.Sync.List.ListData,
   targetListData: LX.Sync.List.ListData,
@@ -211,7 +211,7 @@ const mergeList = (
 
   return newListData
 }
-const overwriteList = (
+export const overwriteList = (
   sourceListData: LX.Sync.List.ListData,
   targetListData: LX.Sync.List.ListData,
 ): LX.Sync.List.ListData => {
@@ -335,7 +335,7 @@ const handleSyncList = async (socket: LX.Socket) => {
   }
 }
 
-const mergeListDataFromSnapshot = (
+export const mergeListDataFromSnapshot = (
   sourceList: LX.Music.MusicInfo[],
   targetList: LX.Music.MusicInfo[],
   snapshotList: LX.Music.MusicInfo[],

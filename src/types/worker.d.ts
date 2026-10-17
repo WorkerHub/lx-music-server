@@ -4,7 +4,10 @@ declare namespace LX {
     userInfo: LX.User
     isReady: boolean
     moduleReadys: { list: boolean; dislike: boolean }
-    feature: { list: any; dislike: any }
+    feature: {
+      list: false | LX.Sync.ListConfig
+      dislike: false | LX.Sync.DislikeConfig
+    }
     remote: LX.Sync.ClientSyncActions
     remoteQueueList: LX.Sync.ClientSyncListActions
     remoteQueueDislike: LX.Sync.ClientSyncDislikeActions

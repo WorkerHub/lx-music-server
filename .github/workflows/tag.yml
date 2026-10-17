@@ -8,8 +8,12 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+# GITHUB_TOKEN is deliberately granted nothing: checkout and the tag push below
+# use the PAT_TOKEN secret, and giving the auto token contents:write would widen
+# the blast radius for no reason. Replacing the long-lived PAT with a GitHub App
+# or a fine-grained token is tracked as a follow-up (see REVIEW L8) — it cannot
+# be done from this workflow file alone.
+permissions: {}
 
 jobs:
   create-tag:

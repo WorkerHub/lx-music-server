@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { SnapshotDataManage } from './snapshotDataManage'
+import { SnapshotDataManage, type SnapshotInfo } from '../snapshotDataManage'
 
-interface SnapshotInfo {
-  latest: string | null
-  time: number
-  list: string[]
-  clients: Record<string, LX.Sync.List.ListInfo>
-}
+const parseListData = (data: string): LX.Sync.List.ListData =>
+  JSON.parse(data) as LX.Sync.List.ListData
 
 const createStorage = () => {
   const data = new Map<string, unknown>()
@@ -37,8 +33,8 @@ describe('saveSnapshotInfo durability (M2)', () => {
       storage,
       'list',
       emptyInfo(),
-      'user',
       3,
+      parseListData,
     )
 
     const info: SnapshotInfo = {
@@ -52,6 +48,82 @@ describe('saveSnapshotInfo durability (M2)', () => {
     // Without awaiting the write, the throttle would defer this 100ms and the
     // index would still be missing right here.
     expect(storage.data.get('list:snapshotInfo')).toEqual(info)
+  })
+})
+
+describe('clearOldSnapshot (M8)', () => {
+  const info = (list: string[], clients = {}): SnapshotInfo => ({
+    latest: 'L',
+    time: 0,
+    list,
+    clients,
+  })
+
+  it('prunes the oldest snapshots beyond maxSnapshotNum', async () => {
+    const storage = createStorage()
+    for (const key of ['k1', 'k2', 'k3', 'k4']) {
+      storage.data.set(`list:snap:${key}`, `${key}-data`)
+    }
+    const manage = new SnapshotDataManage(
+      storage,
+      'list',
+      info(['k1', 'k2', 'k3', 'k4']),
+      2,
+      parseListData,
+    )
+
+    await manage.clearOldSnapshot()
+
+    // Newest two (k1, k2) survive; oldest (k3, k4) are removed.
+    expect(storage.data.has('list:snap:k1')).toBe(true)
+    expect(storage.data.has('list:snap:k2')).toBe(true)
+    expect(storage.data.has('list:snap:k3')).toBe(false)
+    expect(storage.data.has('list:snap:k4')).toBe(false)
+    expect(
+      (storage.data.get('list:snapshotInfo') as SnapshotInfo).list,
+    ).toEqual(['k1', 'k2'])
+  })
+
+  it('keeps device-referenced snapshots even when they are old', async () => {
+    const storage = createStorage()
+    for (const key of ['k1', 'k2', 'k3']) {
+      storage.data.set(`list:snap:${key}`, `${key}-data`)
+    }
+    const manage = new SnapshotDataManage(
+      storage,
+      'list',
+      info(['k1', 'k2', 'k3'], {
+        dev: { snapshotKey: 'k3', lastSyncDate: 0 },
+      }),
+      1,
+      parseListData,
+    )
+
+    await manage.clearOldSnapshot()
+
+    // Only k2 (the oldest non-referenced key) is removed; k3 stays alive.
+    expect(storage.data.has('list:snap:k1')).toBe(true)
+    expect(storage.data.has('list:snap:k2')).toBe(false)
+    expect(storage.data.has('list:snap:k3')).toBe(true)
+  })
+
+  it('does nothing when the snapshot count is within the limit', async () => {
+    const storage = createStorage()
+    for (const key of ['k1', 'k2']) {
+      storage.data.set(`list:snap:${key}`, `${key}-data`)
+    }
+    const manage = new SnapshotDataManage(
+      storage,
+      'list',
+      info(['k1', 'k2']),
+      3,
+      parseListData,
+    )
+
+    await manage.clearOldSnapshot()
+
+    expect(storage.data.has('list:snap:k1')).toBe(true)
+    expect(storage.data.has('list:snap:k2')).toBe(true)
   })
 })
 
@@ -72,8 +144,8 @@ describe('shared snapshot key reference counting (L3)', () => {
           devB: { snapshotKey: 'K', lastSyncDate: 0 },
         },
       },
-      'user',
       1,
+      parseListData,
     )
 
     // devA moves off the shared key K; devB still references it.
@@ -101,8 +173,8 @@ describe('shared snapshot key reference counting (L3)', () => {
           devB: { snapshotKey: 'K', lastSyncDate: 0 },
         },
       },
-      'user',
       2,
+      parseListData,
     )
 
     await manage.updateDeviceSnapshotKey('devA', 'K2')
@@ -123,8 +195,8 @@ describe('shared snapshot key reference counting (L3)', () => {
         list: ['K'],
         clients: { devA: { snapshotKey: 'K', lastSyncDate: 0 } },
       },
-      'user',
       2,
+      parseListData,
     )
 
     // Same-key update is decrement(K) then increment(K): net zero.
@@ -140,8 +212,8 @@ describe('shared snapshot key reference counting (L3)', () => {
       storage,
       'list',
       { latest: 'L', time: 0, list: ['K'], clients: {} },
-      'user',
       2,
+      parseListData,
     )
 
     await manage.updateDeviceSnapshotKey('devA', 'K')
