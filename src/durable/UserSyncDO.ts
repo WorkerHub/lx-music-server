@@ -187,8 +187,9 @@ export class UserSyncDO implements DurableObject {
       encryptedMsg: string
       clientId?: string
       serverName: string
+      userName?: string
     }>()
-    const { encryptedMsg, clientId, serverName } = body
+    const { encryptedMsg, clientId, serverName, userName } = body
 
     // 已知设备重新认证
     if (clientId) {
@@ -211,56 +212,57 @@ export class UserSyncDO implements DurableObject {
       return new Response(aesEncrypt(SYNC_CODE.helloMsg, keyInfo.key))
     }
 
-    // 新设备首次认证
-    const users = this.getUsers()
-    for (const userInfo of users) {
-      const keySeed = getKeySeed(userInfo)
-      if (!keySeed) continue
-      const key = btoa(keySeed)
-      let text: string
-      try {
-        text = aesDecrypt(encryptedMsg, key)
-      } catch {
-        continue
-      }
-      if (!text.startsWith(SYNC_CODE.authMsg)) continue
-
-      const data = text.split('\n')
-      const publicKey = `-----BEGIN PUBLIC KEY-----\n${data[1]}\n-----END PUBLIC KEY-----`
-      const deviceName = data[2] || 'Unknown'
-      const isMobile = data[3] === 'lx_music_mobile'
-      const keyInfo = createClientKeyInfo(deviceName, isMobile)
-
-      // 首次认证时建立 userName（先设置再 await，防止并发双重初始化）
-      if (!this.userName) {
-        const name = userInfo.name
-        this.userName = name
-        await this.loadAndInit(name)
-      }
-
-      this.userSpace!.dataManage.devicesInfo.userName = userInfo.name
-      await this.userSpace!.dataManage.saveClientKeyInfo(keyInfo)
-
-      const encrypted = await rsaEncrypt(
-        JSON.stringify({
-          clientId: keyInfo.clientId,
-          key: keyInfo.key,
-          serverName,
-        }),
-        publicKey,
-      )
-      return new Response(
-        JSON.stringify({
-          encrypted,
-          clientId: keyInfo.clientId,
-          userName: userInfo.name,
-        }),
-        {
-          headers: { 'content-type': 'application/json' },
-        },
-      )
+    // 新设备首次认证：路由层已经确定了 userName，DO 只校验该用户，
+    // 不再遍历全部用户解密，避免同密码用户之间绑定串户（REVIEW M4）。
+    if (!userName) return new Response(null, { status: 401 })
+    const userInfo = this.getUsers().find((u) => u.name === userName)
+    if (!userInfo) return new Response(null, { status: 401 })
+    const keySeed = getKeySeed(userInfo)
+    if (!keySeed) return new Response(null, { status: 401 })
+    const key = btoa(keySeed)
+    let text: string
+    try {
+      text = aesDecrypt(encryptedMsg, key)
+    } catch {
+      return new Response(null, { status: 401 })
     }
-    return new Response(null, { status: 401 })
+    if (!text.startsWith(SYNC_CODE.authMsg))
+      return new Response(null, { status: 401 })
+
+    const data = text.split('\n')
+    const publicKey = `-----BEGIN PUBLIC KEY-----\n${data[1]}\n-----END PUBLIC KEY-----`
+    const deviceName = data[2] || 'Unknown'
+    const isMobile = data[3] === 'lx_music_mobile'
+    const keyInfo = createClientKeyInfo(deviceName, isMobile)
+
+    // 首次认证时建立 userName（先设置再 await，防止并发双重初始化）
+    if (!this.userName) {
+      const name = userInfo.name
+      this.userName = name
+      await this.loadAndInit(name)
+    }
+
+    this.userSpace!.dataManage.devicesInfo.userName = userInfo.name
+    await this.userSpace!.dataManage.saveClientKeyInfo(keyInfo)
+
+    const encrypted = await rsaEncrypt(
+      JSON.stringify({
+        clientId: keyInfo.clientId,
+        key: keyInfo.key,
+        serverName,
+      }),
+      publicKey,
+    )
+    return new Response(
+      JSON.stringify({
+        encrypted,
+        clientId: keyInfo.clientId,
+        userName: userInfo.name,
+      }),
+      {
+        headers: { 'content-type': 'application/json' },
+      },
+    )
   }
 
   private async handleWebSocketUpgrade(request: Request): Promise<Response> {

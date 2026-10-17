@@ -1,49 +1,20 @@
 import { LIST_IDS } from '@/constants'
 import { arrPush, arrPushByPosition, arrUnshift } from '@/utils/common'
-import type { SnapshotDataManage } from './snapshotDataManage'
 
 export class ListDataManage {
-  snapshotDataManage: SnapshotDataManage
   userLists: LX.List.UserListInfo[] = []
   allMusicList = new Map<string, LX.Music.MusicInfo[]>()
 
-  constructor(
-    snapshotDataManage: SnapshotDataManage,
-    preloadedListData?: LX.Sync.List.ListData,
-  ) {
-    this.snapshotDataManage = snapshotDataManage
-
-    if (preloadedListData) {
-      const listData = preloadedListData
-      this.allMusicList.set(LIST_IDS.DEFAULT, listData.defaultList)
-      this.allMusicList.set(LIST_IDS.LOVE, listData.loveList)
-      this.userLists.push(
-        ...listData.userList.map(({ list, ...l }) => {
-          this.allMusicList.set(l.id, list)
-          return l
-        }),
-      )
-    } else {
-      let listData: LX.Sync.List.ListData | null
-      void this.snapshotDataManage
-        .getSnapshotInfo()
-        .then(async (snapshotInfo) => {
-          if (snapshotInfo.latest)
-            listData = await this.snapshotDataManage.getSnapshot(
-              snapshotInfo.latest,
-            )
-          if (!listData)
-            listData = { defaultList: [], loveList: [], userList: [] }
-          this.allMusicList.set(LIST_IDS.DEFAULT, listData.defaultList)
-          this.allMusicList.set(LIST_IDS.LOVE, listData.loveList)
-          this.userLists.push(
-            ...listData.userList.map(({ list, ...l }) => {
-              this.allMusicList.set(l.id, list)
-              return l
-            }),
-          )
-        })
-    }
+  constructor(preloadedListData: LX.Sync.List.ListData) {
+    const listData = preloadedListData
+    this.allMusicList.set(LIST_IDS.DEFAULT, listData.defaultList)
+    this.allMusicList.set(LIST_IDS.LOVE, listData.loveList)
+    this.userLists.push(
+      ...listData.userList.map(({ list, ...l }) => {
+        this.allMusicList.set(l.id, list)
+        return l
+      }),
+    )
   }
 
   getListData = async (): Promise<LX.Sync.List.ListData> => {
@@ -216,7 +187,10 @@ export class ListDataManage {
     const map = new Map<string, LX.List.UserListInfo>()
     for (const item of newUserLists) map.set(item.id, item)
     for (const id of ids) {
-      const listInfo = map.get(id) as LX.List.UserListInfo
+      const listInfo = map.get(id)
+      // Skip unknown ids — a client can send a list id that no longer exists,
+      // and `map.get` returns undefined for it (see REVIEW M3).
+      if (!listInfo) continue
       listInfo.locationUpdateTime = Date.now()
       updateLists.push(listInfo)
       map.delete(id)
@@ -334,7 +308,10 @@ export class ListDataManage {
     const map = new Map<string, LX.Music.MusicInfo>()
     for (const item of targetList) map.set(item.id, item)
     for (const id of ids) {
-      infos.push(map.get(id) as LX.Music.MusicInfo)
+      const info = map.get(id)
+      // Skip unknown ids rather than pushing undefined into `infos` (REVIEW M3).
+      if (!info) continue
+      infos.push(info)
       map.delete(id)
     }
     const list = targetList.filter((mInfo) => map.has(mInfo.id))
