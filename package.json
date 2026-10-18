@@ -21,7 +21,7 @@
     "@biomejs/biome": "^2.5.0",
     "@types/node": "^25.9.4",
     "typescript": "^7.0.0",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.0",
     "wrangler": "^4.102.0"
   },
   "packageManager": "pnpm@12.11.2"
