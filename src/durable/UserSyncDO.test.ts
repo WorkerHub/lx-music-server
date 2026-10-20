@@ -1,25 +1,60 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { aesEncrypt } from '@/utils/crypto'
+import {
+  addTestUser,
+  createMemoryStorage,
+  createTestEnv,
+  type MemoryStorage,
+} from '@/test/registryEnv'
+import { getUserSpace } from '@/user'
+import { aesEncrypt, toMD5 } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import { isConnectionLimitReached, UserSyncDO } from './UserSyncDO'
 
-const createStorage = () => {
-  const data = new Map<string, unknown>()
-  return {
-    data,
-    get: async <T>(key: string) => data.get(key) as T | undefined,
-    put: async <T>(key: string, value: T) => {
-      data.set(key, value)
-    },
-    delete: async (key: string) => {
-      data.delete(key)
-      return true
-    },
-  } as DurableObjectStorage & { data: Map<string, unknown> }
-}
-
 const authText = (deviceName = 'dev') =>
   `lx-music auth::\n<publickey>\n${deviceName}\n`
+
+const initDo = async (
+  env: LX.Env,
+  storage: MemoryStorage,
+): Promise<{ doInstance: UserSyncDO; init: Promise<void> }> => {
+  let init: Promise<void> = Promise.resolve()
+  const state = {
+    storage,
+    blockConcurrencyWhile: (fn: () => Promise<void>) => {
+      init = fn()
+      return init
+    },
+  } as unknown as DurableObjectState
+  const doInstance = new UserSyncDO(state, env)
+  await init
+  return { doInstance, init }
+}
+
+const seedDevice = (
+  storage: MemoryStorage,
+  userName: string,
+  clientId: string,
+  key: string,
+  deviceName = 'dev',
+) => {
+  storage.data.set('devices', {
+    userName,
+    clients: {
+      [clientId]: {
+        clientId,
+        key,
+        deviceName,
+        isMobile: false,
+        lastConnectDate: 0,
+      },
+    },
+  })
+}
+
+const newKey = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return btoa(String.fromCharCode(...bytes))
+}
 
 describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
   it('rejects a message that only another user can decrypt', async () => {
@@ -27,19 +62,8 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
       { name: 'alice', password: 'aaa' },
       { name: 'bob', password: 'bbb' },
     ]
-    const storage = createStorage()
-    let initPromise: Promise<void> = Promise.resolve()
-    const state = {
-      storage,
-      blockConcurrencyWhile: (fn: () => Promise<void>) => {
-        initPromise = fn()
-        return initPromise
-      },
-    } as unknown as DurableObjectState
-    const env = { LX_USERS: JSON.stringify(users) } as unknown as LX.Env
-
-    const doInstance = new UserSyncDO(state, env)
-    await initPromise
+    const { env } = await createTestEnv({ users })
+    const { doInstance } = await initDo(env, createMemoryStorage())
 
     // Encrypt with bob's key, but route the auth to alice. The DO must only
     // try alice's key and reject, instead of looping all users and binding bob.
@@ -62,17 +86,10 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
   })
 
   it('rejects when the routed userName is unknown', async () => {
-    const users: LX.User[] = [{ name: 'alice', password: 'aaa' }]
-    const storage = createStorage()
-    const state = {
-      storage,
-      blockConcurrencyWhile: async (fn: () => Promise<void>) => {
-        await fn()
-      },
-    } as unknown as DurableObjectState
-    const env = { LX_USERS: JSON.stringify(users) } as unknown as LX.Env
-
-    const doInstance = new UserSyncDO(state, env)
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'aaa' }],
+    })
+    const { doInstance } = await initDo(env, createMemoryStorage())
 
     const resp = await doInstance.fetch(
       new Request('https://do/auth', {
@@ -90,43 +107,24 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
   })
 
   it('re-authenticates a known device via clientId without a userName', async () => {
-    const users: LX.User[] = [{ name: 'alice', password: 'aaa' }]
-    const keyBytes = crypto.getRandomValues(new Uint8Array(16))
-    const key = btoa(String.fromCharCode(...keyBytes))
-    const clientId = 'client-1'
-    const deviceName = 'dev1'
-    const storage = createStorage()
-    storage.data.set('devices', {
-      userName: 'alice',
-      clients: {
-        [clientId]: {
-          clientId,
-          key,
-          deviceName,
-          isMobile: false,
-          lastConnectDate: 0,
-        },
-      },
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'aaa' }],
     })
-    let initPromise: Promise<void> = Promise.resolve()
-    const state = {
-      storage,
-      blockConcurrencyWhile: (fn: () => Promise<void>) => {
-        initPromise = fn()
-        return initPromise
-      },
-    } as unknown as DurableObjectState
-    const env = { LX_USERS: JSON.stringify(users) } as unknown as LX.Env
+    const storage = createMemoryStorage()
+    const key = newKey()
+    seedDevice(storage, 'alice', 'client-1', key, 'dev1')
+    const { doInstance } = await initDo(env, storage)
 
-    const doInstance = new UserSyncDO(state, env)
-    await initPromise
-
-    const encryptedMsg = aesEncrypt(`lx-music auth::${deviceName}`, key)
+    const encryptedMsg = aesEncrypt(`lx-music auth::dev1`, key)
     const resp = await doInstance.fetch(
       new Request('https://do/auth', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ encryptedMsg, clientId, serverName: 'test' }),
+        body: JSON.stringify({
+          encryptedMsg,
+          clientId: 'client-1',
+          serverName: 'test',
+        }),
       }),
     )
 
@@ -134,24 +132,251 @@ describe('UserSyncDO first-auth trusts the routed userName (M4)', () => {
   })
 })
 
-describe('handleGetDevices when userSpace is uninitialized (L6)', () => {
-  it('returns 503 with an error body instead of an empty list', async () => {
-    const storage = createStorage()
+describe('UserSyncDO status gate', () => {
+  it('refuses a first auth for a pending account', async () => {
+    const { env } = await createTestEnv()
+    await addTestUser(env, {
+      name: 'waiting',
+      password: 'pw12345678',
+      status: 'pending',
+      source: 'self',
+    })
+    const { doInstance } = await initDo(env, createMemoryStorage())
+
+    const key = btoa(
+      getKeySeed({
+        name: 'waiting',
+        passwordHash: toMD5('pw12345678'),
+      }) as string,
+    )
+    const resp = await doInstance.fetch(
+      new Request('https://do/auth', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          encryptedMsg: aesEncrypt(authText(), key),
+          serverName: 'test',
+          userName: 'waiting',
+        }),
+      }),
+    )
+
+    expect(resp.status).toBe(401)
+  })
+
+  it('refuses a WebSocket upgrade for a disabled account', async () => {
+    const { env } = await createTestEnv()
+    await addTestUser(env, {
+      name: 'blocked',
+      password: 'pw12345678',
+      status: 'disabled',
+    })
+    const storage = createMemoryStorage()
+    const key = newKey()
+    seedDevice(storage, 'blocked', 'client-1', key)
+    const { doInstance } = await initDo(env, storage)
+
+    const token = aesEncrypt('lx-music connect', key)
+    const resp = await doInstance.fetch(
+      new Request(`https://do/ws?i=client-1&t=${encodeURIComponent(token)}`, {
+        headers: { upgrade: 'websocket' },
+      }),
+    )
+
+    expect(resp.status).toBe(401)
+  })
+})
+
+describe('UserSyncDO admin endpoints', () => {
+  it('returns 503 from /devices when userSpace is uninitialized (L6)', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw' }],
+    })
     const state = {
-      storage,
+      storage: createMemoryStorage(),
       // Never run initialize, leaving this.userSpace null.
       blockConcurrencyWhile: () => {},
     } as unknown as DurableObjectState
-    const env = {
-      LX_USERS: JSON.stringify([{ name: 'alice', password: 'pw' }]),
-    } as unknown as LX.Env
-
     const doInstance = new UserSyncDO(state, env)
+
     const resp = await doInstance.fetch(new Request('https://do/devices'))
 
     expect(resp.status).toBe(503)
     const body = (await resp.json()) as { error: string }
     expect(body.error).toBe('user space not initialized')
+  })
+
+  it('summarizes snapshot data for /data-status', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    storage.data.set('devices', { userName: 'alice', clients: {} })
+    storage.data.set('list:snapshotInfo', {
+      latest: 'l1',
+      time: 111,
+      list: ['l1', 'l0'],
+      clients: {},
+    })
+    storage.data.set('dislike:snapshotInfo', {
+      latest: null,
+      time: 0,
+      list: [],
+      clients: {},
+    })
+    const { doInstance } = await initDo(env, storage)
+
+    const resp = await doInstance.fetch(new Request('https://do/data-status'))
+
+    expect(await resp.json()).toEqual({
+      list: { latest: 'l1', time: 111, snapshotCount: 2 },
+      dislike: null,
+    })
+  })
+
+  it('unbinds every device but keeps the sync data', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    const key = newKey()
+    seedDevice(storage, 'alice', 'c1', key)
+    storage.data.set('list:snapshotInfo', {
+      latest: 'l1',
+      time: 1,
+      list: ['l1'],
+      clients: { c1: { snapshotKey: 'l1', lastSyncDate: 1 } },
+    })
+    storage.data.set('dislike:snapshotInfo', {
+      latest: null,
+      time: 0,
+      list: [],
+      clients: { c1: { snapshotKey: '', lastSyncDate: 1 } },
+    })
+    const { doInstance } = await initDo(env, storage)
+
+    const resp = await doInstance.fetch(
+      new Request('https://do/unbind-all', { method: 'POST' }),
+    )
+
+    expect(resp.status).toBe(204)
+    const devices = storage.data.get('devices') as {
+      clients: Record<string, unknown>
+    }
+    expect(devices.clients).toEqual({})
+    const listInfo = storage.data.get('list:snapshotInfo') as {
+      latest: string
+      clients: Record<string, unknown>
+    }
+    expect(listInfo.latest).toBe('l1')
+    expect(listInfo.clients).toEqual({})
+  })
+
+  it('purges all storage and resets the in-memory user space', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    seedDevice(storage, 'alice', 'c1', newKey())
+    storage.data.set('list:snapshotInfo', {
+      latest: 'l1',
+      time: 1,
+      list: ['l1'],
+      clients: {},
+    })
+    const { doInstance } = await initDo(env, storage)
+
+    const resp = await doInstance.fetch(
+      new Request('https://do/purge', { method: 'POST' }),
+    )
+
+    expect(resp.status).toBe(204)
+    expect(storage.data.size).toBe(0)
+    const devices = await doInstance.fetch(new Request('https://do/devices'))
+    expect(devices.status).toBe(503)
+  })
+
+  it('decodes a percent-encoded clientId when deleting a device', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    const clientId = 'abc/def=='
+    seedDevice(storage, 'alice', clientId, newKey())
+    const { doInstance } = await initDo(env, storage)
+
+    const resp = await doInstance.fetch(
+      new Request(`https://do/devices/${encodeURIComponent(clientId)}`, {
+        method: 'DELETE',
+      }),
+    )
+
+    expect(resp.status).toBe(204)
+    const devices = storage.data.get('devices') as {
+      clients: Record<string, unknown>
+    }
+    expect(devices.clients).toEqual({})
+  })
+
+  it('disposes the old user space so late writes cannot resurrect purged data', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    seedDevice(storage, 'alice', 'c1', newKey())
+    storage.data.set('list:snapshotInfo', {
+      latest: 'l1',
+      time: 1,
+      list: ['l1'],
+      clients: {},
+    })
+    const { doInstance } = await initDo(env, storage)
+    const oldSpace = getUserSpace('alice')
+
+    const resp = await doInstance.fetch(
+      new Request('https://do/purge', { method: 'POST' }),
+    )
+
+    expect(resp.status).toBe(204)
+    expect(storage.data.size).toBe(0)
+    expect(() => getUserSpace('alice')).toThrow()
+
+    // A late socket-close flush, device removal or auth handler must be a no-op.
+    await oldSpace.flush()
+    await oldSpace.removeDevice('c1')
+    await oldSpace.dataManage.saveClientKeyInfo({
+      clientId: 'late',
+      key: 'late-key',
+      deviceName: 'late',
+      isMobile: false,
+      lastConnectDate: 0,
+    })
+    expect(storage.data.size).toBe(0)
+  })
+
+  it('kicks live sockets without unbinding devices', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    seedDevice(storage, 'alice', 'c1', newKey())
+    const { doInstance } = await initDo(env, storage)
+    const close = vi.fn()
+    ;(doInstance as any).sockets.add({
+      keyInfo: { clientId: 'c1', isMobile: false },
+      close,
+    })
+
+    const resp = await doInstance.fetch(
+      new Request('https://do/kick', { method: 'POST' }),
+    )
+
+    expect(resp.status).toBe(204)
+    expect(close).toHaveBeenCalled()
+    const devices = storage.data.get('devices') as {
+      clients: Record<string, unknown>
+    }
+    expect(Object.keys(devices.clients)).toEqual(['c1'])
   })
 })
 
@@ -174,16 +399,15 @@ describe('ping interval lifecycle (M1)', () => {
     vi.useRealTimers()
   })
 
-  it('starts on mobile connect, pings only mobile, and stops when the last mobile leaves', () => {
+  it('starts on mobile connect, pings only mobile, and stops when the last mobile leaves', async () => {
     vi.useFakeTimers({
       toFake: ['setInterval', 'clearInterval', 'setTimeout', 'Date'],
     })
-    const storage = createStorage()
+    const { env } = await createTestEnv({ users: [] })
     const state = {
-      storage,
+      storage: createMemoryStorage(),
       blockConcurrencyWhile: () => {},
     } as unknown as DurableObjectState
-    const env = { LX_USERS: JSON.stringify([]) } as unknown as LX.Env
     const doInstance = new UserSyncDO(state, env) as any
 
     // 没有移动端连接时不启动定时器。

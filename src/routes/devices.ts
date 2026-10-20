@@ -1,22 +1,14 @@
 import { Hono } from 'hono'
+import { getUser } from '@/registry/client'
 import { toMD5 } from '@/utils/crypto'
 import { constantTimeEqual, resolveMD5 } from '@/utils/password'
 
 const app = new Hono<{ Bindings: LX.Env }>()
 
-const parseUsers = (raw: string): LX.User[] => {
-  try {
-    return JSON.parse(raw || '[]')
-  } catch (err) {
-    console.error('invalid LX_USERS:', err)
-    return []
-  }
-}
-
-const basicAuth = (c: {
+const basicAuth = async (c: {
   req: { raw: Request }
   env: LX.Env
-}): string | null => {
+}): Promise<string | null> => {
   const authHeader = c.req.raw.headers.get('authorization')
   if (!authHeader?.startsWith('Basic ')) return null
 
@@ -32,23 +24,26 @@ const basicAuth = (c: {
   const username = decoded.slice(0, sep)
   const password = decoded.slice(sep + 1)
 
-  const users = parseUsers(c.env.LX_USERS)
-  // Compare MD5 digests (both sides normalized to fixed-length) in constant
-  // time so the stored password does not leak through timing. Supports both
-  // plaintext `password` and precomputed `passwordHash` storage.
-  const providedMD5 = toMD5(password)
-  let matched: string | null = null
-  for (const u of users) {
-    if (u.name !== username) continue
-    const storedMD5 = resolveMD5(u)
-    if (storedMD5 === null) continue
-    if (constantTimeEqual(providedMD5, storedMD5)) matched = u.name
+  let user: LX.RegistryUser | null
+  try {
+    user = await getUser(c.env, username)
+  } catch (err) {
+    console.error('registry unavailable:', err)
+    return null
   }
-  return matched
+  // Pending/disabled accounts are rejected exactly like unknown ones.
+  if (!user || user.status !== 'active') return null
+
+  // Compare MD5 digests (both sides normalized to fixed-length) in constant
+  // time so the stored password does not leak through timing.
+  const providedMD5 = toMD5(password)
+  const storedMD5 = resolveMD5(user)
+  if (storedMD5 === null) return null
+  return constantTimeEqual(providedMD5, storedMD5) ? user.name : null
 }
 
 app.get('/devices', async (c) => {
-  const userName = basicAuth(c)
+  const userName = await basicAuth(c)
   if (!userName) {
     return c.text('Unauthorized', 401, {
       'www-authenticate': 'Basic realm="LX Music Server"',
@@ -65,7 +60,7 @@ app.get('/devices', async (c) => {
 })
 
 app.delete('/devices/:clientId', async (c) => {
-  const userName = basicAuth(c)
+  const userName = await basicAuth(c)
   if (!userName) {
     return c.text('Unauthorized', 401, {
       'www-authenticate': 'Basic realm="LX Music Server"',

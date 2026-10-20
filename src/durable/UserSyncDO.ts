@@ -1,10 +1,17 @@
 import { createMsg2call } from 'message2call'
 import { SYNC_CLOSE_CODE, SYNC_CODE } from '@/constants'
+import { getUser } from '@/registry/client'
 import { callObj, sync } from '@/sync'
-import { createUserSpace, setUserSpace, type UserSpace } from '@/user'
+import {
+  createUserSpace,
+  removeUserSpace,
+  setUserSpace,
+  type UserSpace,
+} from '@/user'
 import {
   createClientKeyInfo,
   getUserConfig,
+  removeUserContext,
   setUsersContext,
 } from '@/user/data'
 import { decryptMsg, encryptMsg, isRawMessageTooLarge } from '@/utils/compress'
@@ -55,17 +62,29 @@ export class UserSyncDO implements DurableObject {
     })
   }
 
-  private getUsers(): LX.User[] {
-    try {
-      return JSON.parse(this.env.LX_USERS || '[]')
-    } catch {
-      return []
-    }
+  // The registry DO is the single source of truth for accounts. A transport
+  // failure throws so callers can answer 503 instead of pretending the
+  // credentials were wrong.
+  private async fetchRegistryUser(
+    userName: string,
+  ): Promise<LX.RegistryUser | null> {
+    if (!userName) return null
+    return getUser(this.env, userName)
   }
 
   private async loadAndInit(userName: string) {
-    const users = this.getUsers()
-    setUsersContext(users, 20)
+    let registryUser: LX.RegistryUser | null = null
+    try {
+      registryUser = await this.fetchRegistryUser(userName)
+    } catch (err) {
+      // Keep the DO usable for admin paths (devices/data-status/purge) even
+      // when the registry is briefly unreachable.
+      console.error('registry lookup failed:', err)
+    }
+    // Sync merge code resolves per-user config from this module-level context;
+    // scoping it to the current user avoids one user's settings leaking into
+    // another DO sharing the isolate.
+    setUsersContext(registryUser ? [registryUser] : [], 20)
 
     const devicesInfo = (await this.state.storage.get<{
       userName: string
@@ -141,11 +160,111 @@ export class UserSyncDO implements DurableObject {
     if (url.pathname === '/devices' && request.method === 'GET')
       return this.handleGetDevices()
     if (url.pathname.startsWith('/devices/') && request.method === 'DELETE') {
-      const clientId = url.pathname.slice('/devices/'.length)
+      // clientIds are base64 and usually end in `=`; routes encode them, so the
+      // DO must decode before looking up the device key (otherwise deletion
+      // silently no-ops for most real clientIds).
+      let clientId: string
+      try {
+        clientId = decodeURIComponent(url.pathname.slice('/devices/'.length))
+      } catch {
+        return new Response('Bad Request', { status: 400 })
+      }
       return this.handleRemoveDevice(clientId)
     }
+    // Internal endpoints used only by the admin API (never routed publicly).
+    if (url.pathname === '/kick' && request.method === 'POST')
+      return this.handleKick()
+    if (url.pathname === '/unbind-all' && request.method === 'POST')
+      return this.handleUnbindAll()
+    if (url.pathname === '/purge' && request.method === 'POST')
+      return this.handlePurge()
+    if (url.pathname === '/data-status' && request.method === 'GET')
+      return this.handleGetDataStatus()
 
     return new Response('Not Found', { status: 404 })
+  }
+
+  private closeAllSockets() {
+    for (const socket of Array.from(this.sockets)) {
+      socket.close(SYNC_CLOSE_CODE.normal)
+    }
+    this.sockets.clear()
+    this.stopPingIntervalIfNoMobile()
+  }
+
+  // Disable: drop live connections but keep devices and data, so re-enabling
+  // the account lets already-paired devices reconnect without re-pairing.
+  private async handleKick(): Promise<Response> {
+    this.closeAllSockets()
+    return new Response(null, { status: 204 })
+  }
+
+  // Account deletion / forced re-pairing: drop every device binding (which
+  // also clears each snapshot's device reference) while keeping the sync data.
+  private async handleUnbindAll(): Promise<Response> {
+    this.closeAllSockets()
+    if (this.userSpace) {
+      const devices = await this.userSpace.getDevices()
+      for (const device of devices) {
+        await this.userSpace.removeDevice(device.clientId)
+      }
+      await this.userSpace.flush()
+    }
+    return new Response(null, { status: 204 })
+  }
+
+  // Irreversible cleanup of an orphaned account's data. The old UserSpace is
+  // disposed and detached first: a throttled snapshot-index save or an
+  // in-flight handler must not write anything back after `deleteAll()`, or a
+  // same-name re-registration would inherit a dangling snapshot index.
+  private async handlePurge(): Promise<Response> {
+    const userName = this.userName
+    this.closeAllSockets()
+    this.ipFailures.clear()
+    this.userSpace?.dispose()
+    removeUserSpace(userName)
+    removeUserContext(userName)
+    this.userSpace = null
+    this.userName = ''
+    setUsersContext([], 20)
+    await this.state.storage.deleteAll()
+    return new Response(null, { status: 204 })
+  }
+
+  private async handleGetDataStatus(): Promise<Response> {
+    const [listInfo, dislikeInfo] = await Promise.all([
+      this.state.storage.get<{
+        latest?: string | null
+        time?: number
+        list?: string[]
+      }>('list:snapshotInfo'),
+      this.state.storage.get<{
+        latest?: string | null
+        time?: number
+        list?: string[]
+      }>('dislike:snapshotInfo'),
+    ])
+
+    const summarize = (
+      info:
+        | { latest?: string | null; time?: number; list?: string[] }
+        | undefined,
+    ) =>
+      info?.latest
+        ? {
+            latest: info.latest,
+            time: info.time ?? 0,
+            snapshotCount: Array.isArray(info.list) ? info.list.length : 0,
+          }
+        : null
+
+    return new Response(
+      JSON.stringify({
+        list: summarize(listInfo),
+        dislike: summarize(dislikeInfo),
+      }),
+      { headers: { 'content-type': 'application/json' } },
+    )
   }
 
   private async handleGetServerId(): Promise<Response> {
@@ -230,8 +349,15 @@ export class UserSyncDO implements DurableObject {
     // 新设备首次认证：路由层已经确定了 userName，DO 只校验该用户，
     // 不再遍历全部用户解密，避免同密码用户之间绑定串户（REVIEW M4）。
     if (!userName) return new Response(null, { status: 401 })
-    const userInfo = this.getUsers().find((u) => u.name === userName)
-    if (!userInfo) return new Response(null, { status: 401 })
+    let userInfo: LX.RegistryUser | null
+    try {
+      userInfo = await this.fetchRegistryUser(userName)
+    } catch (err) {
+      console.error('registry lookup failed:', err)
+      return new Response(null, { status: 503 })
+    }
+    if (!userInfo || userInfo.status !== 'active')
+      return new Response(null, { status: 401 })
     const keySeed = getKeySeed(userInfo)
     if (!keySeed) return new Response(null, { status: 401 })
     const key = btoa(keySeed)
@@ -331,9 +457,22 @@ export class UserSyncDO implements DurableObject {
 
     this.ipFailures.delete(ip)
 
-    const users = this.getUsers()
-    const user = users.find((u) => u.name === this.userName)
-    if (!user) return new Response(SYNC_CODE.msgAuthFailed, { status: 401 })
+    let user: LX.RegistryUser | null
+    try {
+      user = await this.fetchRegistryUser(this.userName)
+    } catch (err) {
+      console.error('registry lookup failed:', err)
+      return new Response(SYNC_CODE.msgAuthFailed, { status: 503 })
+    }
+    if (!user || user.status !== 'active')
+      return new Response(SYNC_CODE.msgAuthFailed, { status: 401 })
+
+    // The constructor's registry lookup may have failed transiently; a
+    // successful upgrade guarantees the sync merge path has this user's config.
+    setUsersContext([user], 20)
+    // Admin edits to maxSnapshotNum apply on the next connection: the cap is
+    // baked into the UserSpace when it is created, so refresh it here.
+    this.userSpace?.setMaxSnapshotNum(user.maxSnapshotNum ?? 20)
 
     // 连接数上限：已达上限且非同一 clientId 重连时拒绝。同一 clientId 重连会
     // 在下方踢掉旧连接，不会增加连接总数，故予以放行。

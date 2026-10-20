@@ -23,6 +23,10 @@ export class SnapshotDataManage<TData> {
   private prefix: 'list' | 'dislike'
   private maxSnapshotNum: number
   snapshotInfo: SnapshotInfo
+  // Set by `dispose()` when the owning DO is purged. Late writes (throttled
+  // snapshot-index saves, in-flight RPC handlers, socket close flushes) must not
+  // resurrect data after `storage.deleteAll()`.
+  private disposed = false
   // Reference count per snapshot key. Multiple devices can share the same
   // snapshot key, so a plain Set would drop the protection the moment one
   // device moves on — leaving the other device's snapshot free to be cleared
@@ -52,8 +56,19 @@ export class SnapshotDataManage<TData> {
     return this.clientSnapshotKeys.has(key)
   }
 
+  // Purge support: after this, no write may reach storage again, so a late
+  // throttled save cannot resurrect a snapshot index after `deleteAll()`.
+  dispose = () => {
+    this.disposed = true
+    this.clientSnapshotKeys.clear()
+  }
+
+  setMaxSnapshotNum = (value: number) => {
+    this.maxSnapshotNum = value
+  }
+
   clearOldSnapshot = async () => {
-    if (!this.snapshotInfo) return
+    if (this.disposed || !this.snapshotInfo) return
     const snapshotList = this.snapshotInfo.list.filter(
       (key) => !this.isIncludesDevice(key),
     )
@@ -70,6 +85,7 @@ export class SnapshotDataManage<TData> {
   }
 
   updateDeviceSnapshotKey = async (clientId: string, key: string) => {
+    if (this.disposed) return
     let client = this.snapshotInfo.clients[clientId]
     if (!client)
       client = this.snapshotInfo.clients[clientId] = {
@@ -99,12 +115,14 @@ export class SnapshotDataManage<TData> {
   // index (latest/list/time) must survive a DO eviction, so it is written
   // directly and awaited instead of relying on the throttle timer (REVIEW M2).
   saveSnapshotInfo = async (info: SnapshotInfo) => {
+    if (this.disposed) return
     this.snapshotInfo = info
     await this.persistSnapshotInfo()
     await this.clearOldSnapshot()
   }
 
   removeSnapshotInfo = (clientId: string) => {
+    if (this.disposed) return
     const client = this.snapshotInfo.clients[clientId]
     if (!client) return
     if (client.snapshotKey) this.decrementRef(client.snapshotKey)
@@ -124,6 +142,7 @@ export class SnapshotDataManage<TData> {
   }
 
   saveSnapshot = async (name: string, data: string) => {
+    if (this.disposed) return
     await this.storage.put(
       `${this.prefix}:snap:${name}`,
       this.parseSnapshotData(data),
@@ -131,10 +150,12 @@ export class SnapshotDataManage<TData> {
   }
 
   removeSnapshot = async (name: string) => {
+    if (this.disposed) return
     await this.storage.delete(`${this.prefix}:snap:${name}`)
   }
 
   persistSnapshotInfo = async (): Promise<void> => {
+    if (this.disposed) return
     await this.storage.put(`${this.prefix}:snapshotInfo`, this.snapshotInfo)
   }
 

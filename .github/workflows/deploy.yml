@@ -30,13 +30,18 @@ jobs:
         env:
           KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
           LX_USERS: ${{ secrets.LX_USERS }}
+          LX_ADMIN_PASSWORD_HASH: ${{ secrets.LX_ADMIN_PASSWORD_HASH }}
         run: |
-          # LX_USERS secret 格式:
+          # LX_USERS secret 格式（可选，仅用于首次播种；播种后由 Registry DO 管理用户）:
           #   简单模式: user1:password1,user2:password2
           #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           #   JSON 模式也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
+          # LX_ADMIN_PASSWORD_HASH secret 格式（可选）:
+          #   管理员密码的 SHA-256（64 位 hex）。未配置时 /admin 与 /api/admin/* 全部 404。
+          #   注意：从 GitHub Secrets 删除它不会移除 Worker 上已有的 secret，
+          #   停用面板还需手动执行 `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。
           python3 - <<'EOF'
-          import os, json, sys
+          import os, json, re, sys
 
           # Inject the KV namespace id into wrangler.toml (config, not secret).
           kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "")
@@ -49,50 +54,52 @@ jobs:
           # Build the LX_USERS secret value (a JSON array string) and write it to
           # a secrets file that wrangler deploy uploads alongside the code. This
           # keeps plaintext passwords out of wrangler.toml [vars], which are
-          # visible in the Cloudflare dashboard.
+          # visible in the Cloudflare dashboard. An empty LX_USERS is allowed:
+          # the registry seeds an empty roster and the admin panel creates users.
           raw = os.environ.get("LX_USERS", "").strip()
-          if not raw:
-              print("::error:: LX_USERS secret is empty or missing; refusing to deploy an empty user list", file=sys.stderr)
-              sys.exit(1)
+          users = []
+          if raw:
+              if raw.startswith("["):
+                  try:
+                      users = json.loads(raw)
+                  except json.JSONDecodeError as e:
+                      print(f"::error:: LX_USERS is not valid JSON: {e}", file=sys.stderr)
+                      sys.exit(1)
+              else:
+                  for pair in raw.split(","):
+                      pair = pair.strip()
+                      if not pair:
+                          continue
+                      parts = pair.split(":", 1)
+                      users.append({"name": parts[0], "password": parts[1] if len(parts) > 1 else ""})
 
-          if raw.startswith("["):
-              try:
-                  users = json.loads(raw)
-              except json.JSONDecodeError as e:
-                  print(f"::error:: LX_USERS is not valid JSON: {e}", file=sys.stderr)
-                  sys.exit(1)
-          else:
-              users = []
-              for pair in raw.split(","):
-                  pair = pair.strip()
-                  if not pair:
-                      continue
-                  parts = pair.split(":", 1)
-                  users.append({"name": parts[0], "password": parts[1] if len(parts) > 1 else ""})
-
-          if not isinstance(users, list):
-              print("::error:: LX_USERS must be a JSON array of user objects", file=sys.stderr)
-              sys.exit(1)
-
-          if not users:
-              print("::error:: LX_USERS resolves to an empty user list; refusing to deploy", file=sys.stderr)
-              sys.exit(1)
-
-          for u in users:
-              if not isinstance(u, dict):
-                  print("::error:: LX_USERS: each entry must be an object", file=sys.stderr)
-                  sys.exit(1)
-              name = u.get("name")
-              if not name:
-                  print("::error:: LX_USERS: every user needs a non-empty 'name'", file=sys.stderr)
-                  sys.exit(1)
-              if not (u.get("password") or u.get("passwordHash")):
-                  print(f"::error:: LX_USERS: user '{name}' needs a non-empty 'password' or 'passwordHash'", file=sys.stderr)
+              if not isinstance(users, list):
+                  print("::error:: LX_USERS must be a JSON array of user objects", file=sys.stderr)
                   sys.exit(1)
 
-          users_json = json.dumps(users)
+              for u in users:
+                  if not isinstance(u, dict):
+                      print("::error:: LX_USERS: each entry must be an object", file=sys.stderr)
+                      sys.exit(1)
+                  name = u.get("name")
+                  if not name:
+                      print("::error:: LX_USERS: every user needs a non-empty 'name'", file=sys.stderr)
+                      sys.exit(1)
+                  if not (u.get("password") or u.get("passwordHash")):
+                      print(f"::error:: LX_USERS: user '{name}' needs a non-empty 'password' or 'passwordHash'", file=sys.stderr)
+                      sys.exit(1)
+
+          secrets = {"LX_USERS": json.dumps(users)}
+
+          admin_hash = os.environ.get("LX_ADMIN_PASSWORD_HASH", "").strip().lower()
+          if admin_hash:
+              if not re.fullmatch(r"[0-9a-f]{64}", admin_hash):
+                  print("::error:: LX_ADMIN_PASSWORD_HASH must be a 64-character hex SHA-256 digest", file=sys.stderr)
+                  sys.exit(1)
+              secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
+
           with open('.secrets.json', 'w') as f:
-              json.dump({"LX_USERS": users_json}, f)
+              json.dump(secrets, f)
           EOF
 
       - name: Deploy
@@ -101,6 +108,7 @@ jobs:
           set -o pipefail
           pnpm wrangler deploy --secrets-file .secrets.json 2>&1 | sed -E \
             -e 's/env\.LX_USERS \(".*"\)/env.LX_USERS (***)/g' \
+            -e 's/env\.LX_ADMIN_PASSWORD_HASH \(".*"\)/env.LX_ADMIN_PASSWORD_HASH (***)/g' \
             -e 's/env\.KV[^ ]* \([^)]*\)/env.KV (***)/g' \
             -e 's#https://([a-z0-9-]+)\.[a-z0-9-]+\.workers\.dev/?#https://\1.***.workers.dev/#gI'
         env:
