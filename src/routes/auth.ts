@@ -1,36 +1,19 @@
 import { Hono } from 'hono'
 import { SYNC_CODE } from '@/constants'
+import { getUser, listAuthUsers } from '@/registry/client'
 import { aesDecrypt } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import { isRateLimited } from '@/utils/rateLimit'
+import { getClientIp } from '@/utils/request'
 
 const app = new Hono<{ Bindings: LX.Env }>()
-
-const getIP = (c: { req: { raw: Request } }) => {
-  // Cloudflare always sets cf-connecting-ip on edge traffic; it is the only
-  // header we trust for rate limiting. x-forwarded-for is removed because a
-  // client can spoof it to rotate rate-limit buckets (REVIEW L1). In local
-  // `wrangler dev` the header is absent and every request keys on "unknown",
-  // which is acceptable because the dev fallback limiter is in-memory and
-  // per-machine anyway.
-  return c.req.raw.headers.get('cf-connecting-ip') ?? 'unknown'
-}
-
-const parseUsers = (raw: string): LX.User[] | null => {
-  try {
-    return JSON.parse(raw || '[]')
-  } catch (err) {
-    console.error('invalid LX_USERS:', err)
-    return null
-  }
-}
 
 // `client:{id}` → userName 映射的 TTL（秒）。365 天，设备重新认证时续期，
 // 避免被删除外的所有路径留下永不过期的孤儿映射（REVIEW M5）。
 const CLIENT_MAPPING_TTL_SECONDS = 365 * 24 * 60 * 60
 
 app.get('/ah', async (c) => {
-  const ip = getIP(c)
+  const ip = getClientIp(c)
   if (await isRateLimited(c.env, ip)) return c.text(SYNC_CODE.msgBlockedIp, 403)
 
   const encryptedMsg = c.req.header('m')
@@ -40,8 +23,8 @@ app.get('/ah', async (c) => {
     return c.text(SYNC_CODE.msgAuthFailed, 401)
   }
 
-  const users = parseUsers(c.env.LX_USERS)
-  if (!users) return c.text('Server Misconfigured', 500)
+  // Only active registry accounts can authenticate; pending/disabled users are
+  // indistinguishable from unknown ones (401, no status leak).
   const serverName = c.env.SERVER_NAME || 'LX Music Server'
   const kv = c.env.KV
 
@@ -52,6 +35,17 @@ app.get('/ah', async (c) => {
       // 映射已过期（365 天 TTL）或被删除：客户端始终带 i 头、且不会自动回退到
       // 首次认证，这里只能返回 401。用户需在客户端重新输入密码走首次认证重新
       // 配对（会生成新的 clientId）。这是个人同步服务下可接受的权衡（REVIEW M5）。
+      return c.text(SYNC_CODE.msgAuthFailed, 401)
+    }
+    // 账号被禁用/删除后，即便设备映射还在也不能续期。
+    let user: LX.RegistryUser | null
+    try {
+      user = await getUser(c.env, userName)
+    } catch (err) {
+      console.error('registry unavailable:', err)
+      return c.text('Server Misconfigured', 500)
+    }
+    if (!user || user.status !== 'active') {
       return c.text(SYNC_CODE.msgAuthFailed, 401)
     }
 
@@ -71,6 +65,14 @@ app.get('/ah', async (c) => {
       expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
     })
     return c.text(await resp.text())
+  }
+
+  let users: Array<{ name: string; passwordHash: string }>
+  try {
+    users = await listAuthUsers(c.env)
+  } catch (err) {
+    console.error('registry unavailable:', err)
+    return c.text('Server Misconfigured', 500)
   }
 
   for (const userInfo of users) {

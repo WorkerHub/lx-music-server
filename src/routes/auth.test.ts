@@ -1,37 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { aesEncrypt } from '@/utils/crypto'
+import { addTestUser, createTestEnv } from '@/test/registryEnv'
+import { aesEncrypt, toMD5 } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import app from './auth'
 
 const CLIENT_MAPPING_TTL_SECONDS = 365 * 24 * 60 * 60
 
-const makeEnv = (
-  kv: {
-    get: (key: string) => Promise<string | null>
-    put: (...args: any[]) => Promise<void>
-  },
-  stubFetch: (req: Request) => Promise<Response>,
-): LX.Env => {
-  return {
-    LX_USERS: JSON.stringify([{ name: 'alice', password: 'pw' }]),
-    SERVER_NAME: 'test',
-    KV: kv,
-    USER_SYNC: {
-      idFromName: () => ({}) as DurableObjectId,
-      get: () => ({ fetch: stubFetch }) as unknown as DurableObjectStub,
-    },
-  } as unknown as LX.Env
-}
+const keyFor = (name: string, password: string) =>
+  btoa(getKeySeed({ name, passwordHash: toMD5(password) }) as string)
+
+const authText = (deviceName = 'dev') =>
+  `lx-music auth::\n<publickey>\n${deviceName}\n`
 
 describe('auth route client mapping TTL (M5)', () => {
   it('writes the client mapping with a TTL on first auth', async () => {
-    const put = vi.fn(async () => {})
-    const user = { name: 'alice', password: 'pw' }
-    const key = btoa(getKeySeed(user) as string)
-    const encryptedMsg = aesEncrypt('lx-music auth::dev', key)
-    const env = makeEnv(
-      { get: async () => null, put },
-      async () =>
+    const { env, kv } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw' }],
+      syncFetch: async () =>
         new Response(
           JSON.stringify({
             encrypted: 'enc',
@@ -40,7 +25,9 @@ describe('auth route client mapping TTL (M5)', () => {
           }),
           { status: 200 },
         ),
-    )
+    })
+    const put = vi.spyOn(kv, 'put')
+    const encryptedMsg = aesEncrypt(authText(), keyFor('alice', 'pw'))
 
     const res = await app.request('/ah', { headers: { m: encryptedMsg } }, env)
 
@@ -51,11 +38,12 @@ describe('auth route client mapping TTL (M5)', () => {
   })
 
   it('renews the client mapping TTL on known-device re-auth', async () => {
-    const put = vi.fn(async () => {})
-    const env = makeEnv(
-      { get: async () => 'alice', put },
-      async () => new Response('hello', { status: 200 }),
-    )
+    const { env, kv } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw' }],
+      syncFetch: async () => new Response('hello', { status: 200 }),
+    })
+    kv.store.set('client:client-1', 'alice')
+    const put = vi.spyOn(kv, 'put')
 
     const res = await app.request(
       '/ah',
@@ -67,5 +55,65 @@ describe('auth route client mapping TTL (M5)', () => {
     expect(put).toHaveBeenCalledWith('client:client-1', 'alice', {
       expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
     })
+  })
+})
+
+describe('auth route status gate', () => {
+  it('rejects a pending account on first auth without touching KV', async () => {
+    const { env, kv } = await createTestEnv({
+      syncFetch: async () => new Response('unexpected', { status: 200 }),
+    })
+    await addTestUser(env, {
+      name: 'waiting',
+      password: 'pw12345678',
+      status: 'pending',
+      source: 'self',
+    })
+    const put = vi.spyOn(kv, 'put')
+
+    const res = await app.request(
+      '/ah',
+      {
+        headers: { m: aesEncrypt(authText(), keyFor('waiting', 'pw12345678')) },
+      },
+      env,
+    )
+
+    expect(res.status).toBe(401)
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  it('rejects a disabled account even when its device mapping still exists', async () => {
+    const { env, kv } = await createTestEnv({
+      syncFetch: async () => new Response('unexpected', { status: 200 }),
+    })
+    await addTestUser(env, {
+      name: 'blocked',
+      password: 'pw12345678',
+      status: 'disabled',
+    })
+    kv.store.set('client:client-1', 'blocked')
+
+    const res = await app.request(
+      '/ah',
+      { headers: { m: 'enc', i: 'client-1' } },
+      env,
+    )
+
+    expect(res.status).toBe(401)
+  })
+
+  it('answers 500 when the registry is unreachable instead of a bogus 401', async () => {
+    const { env } = await createTestEnv()
+    env.USER_REGISTRY = {
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => {
+        throw new Error('registry down')
+      },
+    } as unknown as DurableObjectNamespace
+
+    const res = await app.request('/ah', { headers: { m: 'enc' } }, env)
+
+    expect(res.status).toBe(500)
   })
 })

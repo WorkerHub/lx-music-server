@@ -7,6 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 name = "USER_SYNC"
 class_name = "UserSyncDO"
 
+# Single instance holding the user registry (accounts, statuses, tombstones and
+# registration settings). Serialized requests make duplicate-name checks atomic.
+[[durable_objects.bindings]]
+name = "USER_REGISTRY"
+class_name = "UserRegistryDO"
+
 [[kv_namespaces]]
 binding = "KV"
 id = "KV_NAMESPACE_ID_PLACEHOLDER"
@@ -14,6 +20,10 @@ id = "KV_NAMESPACE_ID_PLACEHOLDER"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["UserSyncDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["UserRegistryDO"]
 
 # IP rate limiting for the /ah auth endpoint (see README "限流").
 # namespace_id must be a positive integer unique within your Cloudflare account.

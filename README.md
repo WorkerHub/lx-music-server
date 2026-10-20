@@ -16,6 +16,7 @@
 - [为什么选这个版本](#为什么选这个版本)
 - [部署指南](#部署指南)
 - [客户端配置](#客户端配置)
+- [管理面板](#管理面板)
 - [设备管理 API](#设备管理-api)
 - [安全说明](#安全说明)
 - [本地开发](#本地开发)
@@ -65,9 +66,10 @@ Secrets：
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | 上一步创建的 API Token |
 | `KV_NAMESPACE_ID` | KV Namespace ID |
-| `LX_USERS` | 用户配置（见下一节） |
+| `LX_USERS` | 用户配置（可选，仅用于首次播种，见下一节） |
+| `LX_ADMIN_PASSWORD_HASH` | 管理面板密码的 SHA-256（可选，见「管理面板」） |
 
-### 4. 配置用户（LX_USERS）
+### 4. 配置用户（LX_USERS，仅首次播种）
 
 `LX_USERS` 以 **Secret** 形式下发（部署时由 GitHub Actions 通过 `wrangler deploy --secrets-file` 写入，不再写进 `wrangler.toml` 的 `[vars]`，因此不会明文出现在 Cloudflare 控制台的变量列表里）。支持两种格式。
 
@@ -104,7 +106,7 @@ JSON 格式（可扩展选项，支持密码哈希）：
 >
 > 存 `passwordHash` 能避免明文密码落在 Cloudflare 控制台，但它仍是「密码等价的派生值」——拿到它的人依然能用该账号认证与同步。因此无论用哪种形式，都务必使用高强度随机密码。
 
-修改用户只需要更新 `LX_USERS` Secret，不需要改代码。
+`LX_USERS` 只在**首次部署**时被一次性导入注册表（用户落为「active / 导入」），之后注册表就是唯一准据：再改 `LX_USERS` 不会影响已存在的用户，新增/删除/改密请在管理面板操作。`LX_USERS` 留空也可以部署——注册表从空名单开始，由面板创建用户。
 
 ### 5. 触发部署
 
@@ -137,6 +139,31 @@ https://lx-music-server.<your-subdomain>.workers.dev
 - 服务器地址：`https://<your-worker-name>.<your-subdomain>.workers.dev`（或自定义域名）
 - 连接码：该用户对应密码
 
+## 管理面板
+
+面板入口 `https://<worker-url>/admin`，只对管理员开放，与同步用户完全分离。
+
+1. 生成管理员密码的 SHA-256（建议使用 16 位以上随机密码）：
+
+```bash
+printf 'your_admin_password' | shasum -a 256
+# 或用 Node
+node -e "console.log(require('crypto').createHash('sha256').update('your_admin_password').digest('hex'))"
+```
+
+2. 把 64 位十六进制结果写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署。**未配置该 Secret 时 `/admin` 与 `/api/admin/*` 全部返回 404**，面板整体禁用。
+
+面板能力：
+
+- 用户列表：用户名、状态（`active` / `pending` / `disabled`）、来源（导入 / 自助注册 / 管理员添加）、创建时间、设备数、快照上限。
+- 添加用户、修改快照上限与插入位置、重置密码。重置密码默认**同时删除该用户全部设备**（强制重新配对）——已配对设备走设备密钥认证，只改密码不会让它们失效，确认时请留意该勾选项。
+- 删除账号：只删账号、保留同步数据；该用户名进入「数据残留」并被保留，防止他人注册同名继承歌单。
+- 数据残留：查看残留的歌单/不喜欢快照概况，可「恢复账号」（同名重建并接回原数据）或「彻底清理」（需输入完整用户名二次确认，不可恢复）。
+- 注册模式：`closed`（关闭注册）/ `open`（注册即生效）/ `approval`（注册后需管理员批准，出厂默认）。
+- 设备管理：查看/删除单个设备，复用 `/devices` 的数据与删除路径。
+
+自助注册页为 `/register`，页面会先读取 `GET /api/registration-info` 决定展示表单还是「未开放」。注册用户的密码规则：至少 8 位、最多 128 位；8–15 位会提示为弱密码（建议 16 位以上随机密码）。
+
 ## 设备管理 API
 
 使用 Basic Auth（与同步账号相同的用户名和密码）。
@@ -161,6 +188,9 @@ curl -u <username>:<password> -X DELETE https://<worker-url>/devices/<clientId>
 - **只对受信网络开放**：认证与同步流量在协议层未做完整的认证加密（同步消息仅 gzip，未用设备密钥加密）。建议绑定自定义域名并配合 Cloudflare Access / WAF 限制来源，或仅在受信网络内使用。
 - **WebSocket 认证 token 位于 URL query**：客户端通过 `/socket?i=...&t=...` 连接，token 会进入浏览器历史、代理日志与错误上报。这是上游协议使然，服务端仍兼容此方式；请避免在不可信设备或共享环境里访问带 token 的完整 URL。
 - **设备管理 API 使用 Basic Auth**：`/devices` 接口用与同步相同的用户名/密码，密码比较已改为常量时间比较，但仍建议只在必要时开放来源（如加 WAF 规则限制 IP）。
+- **管理面板是最高权限入口**：`/admin` 可增删用户、重置密码、清理同步数据。请使用独立的高强度随机密码（`LX_ADMIN_PASSWORD_HASH` 只存 SHA-256），并强烈建议在 Cloudflare 侧再叠加 Access 策略或 WAF 限源，只允许自己的网络访问 `/admin` 与 `/api/admin/*`。会话 Cookie 为 `HttpOnly; Secure; SameSite=Strict`，有效期 7 天；更换管理员密码后旧会话立即失效。
+- **自助注册的风险**：`open` 模式下任何人都能创建账号，`approval`（默认）仍需管理员批准。若服务器对公网开放且不需要注册，请把注册模式切到 `closed`；注册接口与登录接口都按 IP 限流。
+- **删除账号不等于删除数据**：删除后同步数据保留，用户名进入「数据残留」并被保留，防止陌生人注册同名继承歌单；只有管理员能恢复账号或在二次确认后彻底清理。请在清理前确认残留内容确实不再需要。
 
 以上风险均源自「不修改客户端协议」这一前提；相关修复（带盐 KDF、AEAD 加密、token 改用首条消息传递等）需客户端配合，暂不在服务端单独改动。
 
@@ -175,7 +205,10 @@ pnpm dev
 
 ```text
 LX_USERS='[{"name":"admin","password":"your_password"}]'
+LX_ADMIN_PASSWORD_HASH='<管理员密码的 64 位 SHA-256>'
 ```
+
+`LX_USERS` 只用于首次播种，`LX_ADMIN_PASSWORD_HASH` 不配置时面板与 `/api/admin/*` 返回 404。
 
 项目已将 `wrangler types` 集成到脚本中，开发和部署前会自动生成类型定义。
 
@@ -199,6 +232,8 @@ pnpm deploy
 2. **（可选）明文密码迁移为 `passwordHash`**：把 `LX_USERS` 里的 `password` 换成 `passwordHash`（32 位十六进制 MD5），明文密码即不再出现在配置里。生成方法见「配置用户」一节；明文 `password` 与 `passwordHash` 两种形式会继续并存支持。
 3. **新增 `RATE_LIMITER` 绑定**：`wrangler.toml` 新增了认证限流绑定，`namespace_id` 需在账号内唯一，如与现有 Worker 冲突请修改后再部署。
 4. **`SERVER_NAME` 保留在 `[vars]`**：非敏感显示名仍留在 `wrangler.toml` 的 `[vars]` 中，可在控制台直接查看/修改。
+5. **用户注册表迁移到 Registry DO**：新增 `UserRegistryDO` 与 `v2` migration（部署时自动应用），首次启动会把 `LX_USERS` 里的用户一次性导入注册表（落 `active` / `source=imported`），之后注册表是唯一准据。`LX_USERS` 变为可选：为空时从空名单开始，由管理面板创建用户。旧客户端无需改动，`/ah`、`/socket`、`/devices` 协议与返回不变。
+6. **新增可选 Secret `LX_ADMIN_PASSWORD_HASH`**：用于启用 `/admin` 管理面板；不配置则面板与 `/api/admin/*` 整体返回 404。部署脚本会校验其为 64 位十六进制 SHA-256。
 
 ## 技术架构
 
@@ -209,6 +244,7 @@ flowchart TD
    A -->|GET /devices| B
    A -->|DELETE /devices/:id| B
    B -->|Read/Write clientId -> userName| C[(KV Namespace)]
+   B -->|Accounts / status / settings| G[UserRegistryDO]
    B -->|Route by user| D[UserSyncDO]
    D --> E[(DO Storage)]
    D --> F[WebSocket Session Hub]
@@ -229,20 +265,20 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：
 
-- `CLOUDFLARE_API_TOKEN`、`KV_NAMESPACE_ID` 和 `LX_USERS` 必须放在 **Secrets**
+- `CLOUDFLARE_API_TOKEN`、`KV_NAMESPACE_ID` 必须放在 **Secrets**；`LX_USERS`、`LX_ADMIN_PASSWORD_HASH` 可选，同样放在 **Secrets**
 
 如果把 Variables 和 Secrets 混淆，部署会直接失败。
 
 ### 2. 我改了 `LX_USERS` 但没有生效？
 
-改 Secret 之后需要重新触发一次 GitHub Actions 部署。
+`LX_USERS` 只在首次部署时导入注册表，之后不再参与鉴权。新增/删除用户、重置密码请使用 `/admin` 管理面板（需配置 `LX_ADMIN_PASSWORD_HASH`）。
 
 ### 3. 部署后连接失败应该先查什么？
 
 优先检查：
 
 - Worker URL 是否填对
-- 用户名和密码是否和 `LX_USERS` 一致
+- 用户名和密码是否和管理面板中的账号一致
 - `KV_NAMESPACE_ID` 与 Cloudflare 账号是否对应
 
 ### 4. 可以只用 Workers 默认域名吗？

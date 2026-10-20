@@ -1,10 +1,14 @@
-// Centralized rate limiting for the `/ah` auth endpoint.
+// Centralized rate limiting for the credential-bearing endpoints: `/ah`,
+// `/api/register` and `/api/admin/login`.
 //
 // Production relies on the Cloudflare Workers Rate Limiting binding
 // (`RATE_LIMITER`), which is backed by Cloudflare's rate-limiting
 // infrastructure (shared with WAF rate limiting rules) instead of per-isolate
 // memory. Counters are cached on-machine and updated in the background, so the
 // `limit()` call adds no meaningful latency.
+//
+// Callers pass a namespaced key (`<ip>`, `register:<ip>`, `admin:<ip>`) so one
+// endpoint's traffic never consumes another's quota.
 //
 // When the binding is absent (e.g. local dev without it configured), we fall
 // back to an in-memory counter. That fallback is NOT effective across isolates
@@ -26,17 +30,17 @@ const ipFailures = new Map<string, { count: number; resetAt: number }>()
  */
 export const isRateLimited = async (
   env: { RATE_LIMITER?: RateLimiterBinding },
-  ip: string,
+  key: string,
 ): Promise<boolean> => {
   if (env.RATE_LIMITER) {
-    const { success } = await env.RATE_LIMITER.limit({ key: ip })
+    const { success } = await env.RATE_LIMITER.limit({ key })
     return !success
   }
 
   const now = Date.now()
-  const entry = ipFailures.get(ip)
+  const entry = ipFailures.get(key)
   if (!entry || entry.resetAt < now) {
-    ipFailures.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS })
+    ipFailures.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS })
     return false
   }
   entry.count++
