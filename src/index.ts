@@ -4,6 +4,7 @@ import adminRoutes from '@/routes/admin'
 import authRoutes from '@/routes/auth'
 import devicesRoutes from '@/routes/devices'
 import helloRoutes from '@/routes/hello'
+import pageRoutes from '@/routes/pages'
 import registerRoutes from '@/routes/register'
 
 export { UserRegistryDO } from '@/durable/UserRegistryDO'
@@ -15,6 +16,7 @@ app.route('/', helloRoutes)
 app.route('/', authRoutes)
 app.route('/', devicesRoutes)
 app.route('/', registerRoutes)
+app.route('/', pageRoutes)
 app.route('/', adminRoutes)
 
 // WebSocket upgrade → UserSyncDO
