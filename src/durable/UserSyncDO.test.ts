@@ -5,6 +5,7 @@ import {
   createTestEnv,
   type MemoryStorage,
 } from '@/test/registryEnv'
+import { getUserSpace } from '@/user'
 import { aesEncrypt, toMD5 } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import { isConnectionLimitReached, UserSyncDO } from './UserSyncDO'
@@ -315,6 +316,42 @@ describe('UserSyncDO admin endpoints', () => {
       clients: Record<string, unknown>
     }
     expect(devices.clients).toEqual({})
+  })
+
+  it('disposes the old user space so late writes cannot resurrect purged data', async () => {
+    const { env } = await createTestEnv({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const storage = createMemoryStorage()
+    seedDevice(storage, 'alice', 'c1', newKey())
+    storage.data.set('list:snapshotInfo', {
+      latest: 'l1',
+      time: 1,
+      list: ['l1'],
+      clients: {},
+    })
+    const { doInstance } = await initDo(env, storage)
+    const oldSpace = getUserSpace('alice')
+
+    const resp = await doInstance.fetch(
+      new Request('https://do/purge', { method: 'POST' }),
+    )
+
+    expect(resp.status).toBe(204)
+    expect(storage.data.size).toBe(0)
+    expect(() => getUserSpace('alice')).toThrow()
+
+    // A late socket-close flush, device removal or auth handler must be a no-op.
+    await oldSpace.flush()
+    await oldSpace.removeDevice('c1')
+    await oldSpace.dataManage.saveClientKeyInfo({
+      clientId: 'late',
+      key: 'late-key',
+      deviceName: 'late',
+      isMobile: false,
+      lastConnectDate: 0,
+    })
+    expect(storage.data.size).toBe(0)
   })
 
   it('kicks live sockets without unbinding devices', async () => {

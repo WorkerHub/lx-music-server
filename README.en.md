@@ -126,9 +126,9 @@ You can also bind a custom domain at `Settings -> Domains & Routes -> Custom Dom
 
 Before migrating from another sync server, back up local client data first.
 
-### 7. Auth rate limiting
+### 7. Auth and registration rate limiting
 
-The `/ah` auth endpoint has built-in IP rate limiting (10 requests / 60 s by default) backed by the Cloudflare Workers Rate Limiting binding (`RATE_LIMITER` in `wrangler.toml`). Its `namespace_id` must be unique within your Cloudflare account: if another Worker already uses `1001`, change it to an unused positive integer.
+`/ah`, `/api/register` and `/api/admin/login` all apply built-in IP rate limiting (10 requests / 60 s by default) through the shared `RATE_LIMITER` binding in `wrangler.toml`. Each endpoint uses its own key (`<ip>`, `register:<ip>`, `admin:<ip>`), so one endpoint's traffic never consumes another's quota. The binding's `namespace_id` must be unique within your Cloudflare account: if another Worker already uses `1001`, change it to an unused positive integer.
 
 > This limit is counted per Cloudflare location and is eventually consistent — enough to stop single-source brute force. For account-wide global limiting, add a Cloudflare WAF rate limiting rule on top.
 
@@ -152,6 +152,8 @@ node -e "console.log(require('crypto').createHash('sha256').update('your_admin_p
 ```
 
 2. Put the 64-char hex digest into the GitHub Secret `LX_ADMIN_PASSWORD_HASH` and redeploy. **Without that secret, `/admin` and every `/api/admin/*` route return 404** and the panel stays disabled.
+
+> Disabling the panel later: removing the GitHub Secret and redeploying does **not** delete the secret already stored on the Worker (`wrangler deploy --secrets-file` only adds/updates). Run `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH` as well, otherwise the old hash stays valid and the panel keeps working.
 
 What the panel does:
 

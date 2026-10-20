@@ -18,6 +18,12 @@ export interface UserSpace {
   getDevices: () => Promise<LX.Sync.KeyInfo[]>
   removeDevice: (clientId: string) => Promise<void>
   flush: () => Promise<void>
+  // Live config refresh: the admin may raise/lower a user's snapshot cap while
+  // the DO stays warm; the next WebSocket upgrade applies it here.
+  setMaxSnapshotNum: (value: number) => void
+  // Purge support: makes every later write a no-op so `deleteAll()` cannot be
+  // undone by a throttled save or an in-flight handler.
+  dispose: () => void
 }
 
 // Module-level context keyed by userName. This exists because a single isolate
@@ -33,6 +39,11 @@ const _userSpaceMap = new Map<string, UserSpace>()
 export const setUserSpace = (name: string, userSpace: UserSpace) => {
   if (!name) return
   _userSpaceMap.set(name, userSpace)
+}
+
+export const removeUserSpace = (name: string) => {
+  if (!name) return
+  _userSpaceMap.delete(name)
 }
 
 export const getUserSpace = (name: string): UserSpace => {
@@ -65,6 +76,8 @@ export const createUserSpace = (
     maxSnapshotNum,
   )
 
+  let disposed = false
+
   const userSpace: UserSpace = {
     dataManage,
     listManage,
@@ -75,12 +88,24 @@ export const createUserSpace = (
       return this.dataManage.getAllClientKeyInfo()
     },
     async removeDevice(clientId) {
+      if (disposed) return
       await listManage.removeDevice(clientId)
       await dislikeManage.removeDevice(clientId)
       await dataManage.removeClientKeyInfo(clientId)
     },
     async flush() {
+      if (disposed) return
       await Promise.all([listManage.flush(), dislikeManage.flush()])
+    },
+    setMaxSnapshotNum(value) {
+      listManage.setMaxSnapshotNum(value)
+      dislikeManage.setMaxSnapshotNum(value)
+    },
+    dispose() {
+      disposed = true
+      dataManage.dispose()
+      listManage.dispose()
+      dislikeManage.dispose()
     },
   }
   return userSpace

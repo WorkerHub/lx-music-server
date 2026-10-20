@@ -38,6 +38,8 @@ jobs:
           #   JSON 模式也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
           # LX_ADMIN_PASSWORD_HASH secret 格式（可选）:
           #   管理员密码的 SHA-256（64 位 hex）。未配置时 /admin 与 /api/admin/* 全部 404。
+          #   注意：从 GitHub Secrets 删除它不会移除 Worker 上已有的 secret，
+          #   停用面板还需手动执行 `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。
           python3 - <<'EOF'
           import os, json, re, sys
 

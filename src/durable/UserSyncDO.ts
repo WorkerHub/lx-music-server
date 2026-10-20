@@ -2,10 +2,16 @@ import { createMsg2call } from 'message2call'
 import { SYNC_CLOSE_CODE, SYNC_CODE } from '@/constants'
 import { getUser } from '@/registry/client'
 import { callObj, sync } from '@/sync'
-import { createUserSpace, setUserSpace, type UserSpace } from '@/user'
+import {
+  createUserSpace,
+  removeUserSpace,
+  setUserSpace,
+  type UserSpace,
+} from '@/user'
 import {
   createClientKeyInfo,
   getUserConfig,
+  removeUserContext,
   setUsersContext,
 } from '@/user/data'
 import { decryptMsg, encryptMsg, isRawMessageTooLarge } from '@/utils/compress'
@@ -207,16 +213,21 @@ export class UserSyncDO implements DurableObject {
     return new Response(null, { status: 204 })
   }
 
-  // Irreversible cleanup of an orphaned account's data. Resetting the
-  // in-memory state is essential: the DO instance may stay warm, and a
-  // same-name re-registration must start from an empty user space.
+  // Irreversible cleanup of an orphaned account's data. The old UserSpace is
+  // disposed and detached first: a throttled snapshot-index save or an
+  // in-flight handler must not write anything back after `deleteAll()`, or a
+  // same-name re-registration would inherit a dangling snapshot index.
   private async handlePurge(): Promise<Response> {
+    const userName = this.userName
     this.closeAllSockets()
     this.ipFailures.clear()
-    await this.state.storage.deleteAll()
+    this.userSpace?.dispose()
+    removeUserSpace(userName)
+    removeUserContext(userName)
     this.userSpace = null
     this.userName = ''
     setUsersContext([], 20)
+    await this.state.storage.deleteAll()
     return new Response(null, { status: 204 })
   }
 
@@ -459,6 +470,9 @@ export class UserSyncDO implements DurableObject {
     // The constructor's registry lookup may have failed transiently; a
     // successful upgrade guarantees the sync merge path has this user's config.
     setUsersContext([user], 20)
+    // Admin edits to maxSnapshotNum apply on the next connection: the cap is
+    // baked into the UserSpace when it is created, so refresh it here.
+    this.userSpace?.setMaxSnapshotNum(user.maxSnapshotNum ?? 20)
 
     // 连接数上限：已达上限且非同一 clientId 重连时拒绝。同一 clientId 重连会
     // 在下方踢掉旧连接，不会增加连接总数，故予以放行。

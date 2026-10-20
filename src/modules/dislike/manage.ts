@@ -55,6 +55,15 @@ export class DislikeManage {
     this.snapshotDataManage.removeSnapshotInfo(clientId)
   }
 
+  // Admin purge: stop every pending/future snapshot write for this user.
+  dispose = () => {
+    this.snapshotDataManage.dispose()
+  }
+
+  setMaxSnapshotNum = (value: number) => {
+    this.snapshotDataManage.setMaxSnapshotNum(value)
+  }
+
   flush = async (): Promise<void> => {
     await this.snapshotDataManage.flush()
   }

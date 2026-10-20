@@ -126,9 +126,9 @@ https://lx-music-server.<your-subdomain>.workers.dev
 
 更换同步服务器前，建议先做本地数据备份。
 
-### 7. 认证接口限流
+### 7. 认证与注册限流
 
-`/ah` 认证接口内置了 IP 限流（默认 10 次 / 60 秒），由 Cloudflare Workers Rate Limiting 绑定实现（`wrangler.toml` 里的 `RATE_LIMITER`）。其 `namespace_id` 需要在你的 Cloudflare 账号内唯一：如果账号里已有其他 Worker 使用了 `1001`，请改成一个未使用的正整数。
+`/ah`、`/api/register` 与 `/api/admin/login` 三个入口内置了 IP 限流（默认 10 次 / 60 秒），共用 `wrangler.toml` 里的 `RATE_LIMITER` 绑定，但各自使用独立的计数键（`<ip>` / `register:<ip>` / `admin:<ip>`），互不占用额度。其 `namespace_id` 需要在你的 Cloudflare 账号内唯一：如果账号里已有其他 Worker 使用了 `1001`，请改成一个未使用的正整数。
 
 > 该限流按 Cloudflare 数据中心（location）粒度计数、最终一致，用于阻挡单点爆破已足够；如需账号级全局限流，可再配置 Cloudflare WAF 速率限制规则。
 
@@ -152,6 +152,8 @@ node -e "console.log(require('crypto').createHash('sha256').update('your_admin_p
 ```
 
 2. 把 64 位十六进制结果写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署。**未配置该 Secret 时 `/admin` 与 `/api/admin/*` 全部返回 404**，面板整体禁用。
+
+> 停用面板时注意：从 GitHub Secrets 里删除并重新部署**不会**删除 Worker 上已有的 Secret（`wrangler deploy --secrets-file` 只增改、不删除）。请再执行一次 `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH`，否则旧哈希仍然有效、面板继续可用。
 
 面板能力：
 

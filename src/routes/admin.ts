@@ -126,7 +126,12 @@ const toView = (
 // Delete every KV client mapping and unbind every device, keeping the DO's
 // sync data. Shared by account deletion and forced re-pairing on password
 // reset.
-const unbindAllDevices = async (env: LX.Env, name: string) => {
+// Returns false when the device list could not be read or the DO refused the
+// cleanup. Callers must surface that instead of reporting a completed cleanup.
+const unbindAllDevices = async (
+  env: LX.Env,
+  name: string,
+): Promise<boolean> => {
   const devices = await fetchUserDevices(env, name)
   if (devices) {
     for (const device of devices) {
@@ -134,17 +139,29 @@ const unbindAllDevices = async (env: LX.Env, name: string) => {
     }
   }
   try {
-    await callUserDo(env, name, '/unbind-all', { method: 'POST' })
+    const resp = await callUserDo(env, name, '/unbind-all', { method: 'POST' })
+    if (!resp.ok) {
+      console.error('unbind-all failed:', resp.status)
+      return false
+    }
+    return devices !== null
   } catch (err) {
     console.error('unbind-all failed:', err)
+    return false
   }
 }
 
-const kickUser = async (env: LX.Env, name: string) => {
+const kickUser = async (env: LX.Env, name: string): Promise<boolean> => {
   try {
-    await callUserDo(env, name, '/kick', { method: 'POST' })
+    const resp = await callUserDo(env, name, '/kick', { method: 'POST' })
+    if (!resp.ok) {
+      console.error('kick failed:', resp.status)
+      return false
+    }
+    return true
   } catch (err) {
     console.error('kick failed:', err)
+    return false
   }
 }
 
@@ -300,7 +317,18 @@ app.post('/api/admin/users/:name/reset-password', async (c) => {
   // a password reset alone does not revoke them. Removing devices is therefore
   // the default and the panel spells this out in its confirmation copy.
   const removeDevices = body.removeDevices !== false
-  if (removeDevices) await unbindAllDevices(c.env, name)
+  if (removeDevices) {
+    const unbound = await unbindAllDevices(c.env, name)
+    if (!unbound)
+      return c.json(
+        {
+          error: 'password changed but devices could not be removed',
+          passwordChanged: true,
+          devicesRemoved: false,
+        },
+        502,
+      )
+  }
   return c.json({ ok: true, devicesRemoved: removeDevices })
 })
 
@@ -316,11 +344,23 @@ const transition = async (
       { error: result.status === 404 ? 'user not found' : 'invalid state' },
       asStatus(result.status),
     )
-  if (status === 'disabled') await kickUser(c.env, name)
   const devices = await fetchUserDevices(c.env, name)
-  return c.json({
-    user: toView(result.data.user, devices === null ? null : devices.length),
-  })
+  const user = toView(
+    result.data.user,
+    devices === null ? null : devices.length,
+  )
+  if (status === 'disabled') {
+    const kicked = await kickUser(c.env, name)
+    if (!kicked)
+      return c.json(
+        {
+          error: 'account disabled but live connections could not be dropped',
+          user,
+        },
+        502,
+      )
+  }
+  return c.json({ user })
 }
 
 app.post('/api/admin/users/:name/approve', (c) =>
@@ -360,7 +400,16 @@ app.delete('/api/admin/users/:name', async (c) => {
   if (!result.ok)
     return c.json({ error: 'user not found' }, asStatus(result.status))
 
-  await unbindAllDevices(c.env, name)
+  const unbound = await unbindAllDevices(c.env, name)
+  if (!unbound)
+    return c.json(
+      {
+        error: 'account deleted but devices could not be unbound',
+        orphaned: true,
+        devicesUnbound: false,
+      },
+      502,
+    )
   return c.json({ orphaned: true })
 })
 

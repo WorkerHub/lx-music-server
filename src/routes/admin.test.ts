@@ -514,6 +514,97 @@ describe('admin account deletion and orphan handling', () => {
   })
 })
 
+describe('admin failure propagation', () => {
+  it('answers 502 when the DO refuses to unbind devices on password reset', async () => {
+    const { env } = await setup({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+      syncFetch: async (_name, request) => {
+        const path = new URL(request.url).pathname
+        if (path === '/devices') return Response.json([{ clientId: 'c1' }])
+        if (path === '/unbind-all') return new Response('boom', { status: 500 })
+        return new Response(null, { status: 204 })
+      },
+    })
+    const cookie = await login(env)
+
+    const res = await app.request(
+      '/api/admin/users/alice/reset-password',
+      authed(cookie, {
+        method: 'POST',
+        ...json({ password: 'newpassword' }),
+      }),
+      env,
+    )
+
+    expect(res.status).toBe(502)
+    expect(await res.json()).toMatchObject({
+      passwordChanged: true,
+      devicesRemoved: false,
+    })
+  })
+
+  it('answers 502 when disable cannot drop live connections', async () => {
+    const { env } = await setup({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+      syncFetch: async (_name, request) => {
+        if (new URL(request.url).pathname === '/kick')
+          return new Response('boom', { status: 500 })
+        return Response.json([])
+      },
+    })
+    const cookie = await login(env)
+
+    const res = await app.request(
+      '/api/admin/users/alice/disable',
+      authed(cookie, { method: 'POST' }),
+      env,
+    )
+
+    expect(res.status).toBe(502)
+    expect((await getUser(env, 'alice'))?.status).toBe('disabled')
+  })
+
+  it('answers 502 with a partial marker when deletion cannot unbind devices', async () => {
+    const { env } = await setup({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+      syncFetch: async (_name, request) => {
+        const path = new URL(request.url).pathname
+        if (path === '/devices') return Response.json([])
+        if (path === '/unbind-all') return new Response('boom', { status: 500 })
+        return new Response(null, { status: 204 })
+      },
+    })
+    const cookie = await login(env)
+
+    const res = await app.request(
+      '/api/admin/users/alice',
+      authed(cookie, { method: 'DELETE' }),
+      env,
+    )
+
+    expect(res.status).toBe(502)
+    expect(await res.json()).toMatchObject({
+      orphaned: true,
+      devicesUnbound: false,
+    })
+    expect(await listTombstones(env)).toHaveLength(1)
+  })
+
+  it('rate-limits admin login attempts', async () => {
+    const { env } = await setup({
+      rateLimiter: { limit: async () => ({ success: false }) },
+    })
+
+    const res = await app.request(
+      '/api/admin/login',
+      { method: 'POST', ...json({ password: ADMIN_PASSWORD }) },
+      env,
+    )
+
+    expect(res.status).toBe(403)
+  })
+})
+
 describe('admin device management', () => {
   it('lists devices and deletes a single one', async () => {
     const { env, kv } = await setup({

@@ -3,21 +3,26 @@ export interface DevicesInfo {
   clients: Record<string, LX.Sync.KeyInfo>
 }
 
-// Module-level user context, written only by `setUsersContext` from the DO's
-// `loadAndInit` path (REVIEW M6). It holds the whole LX_USERS roster plus the
-// default snapshot cap, so `getUserConfig` can resolve a single user's config
-// without a UserSpace. Constraint: every DO init rewrites it before any sync
-// runs, and reads never escape the isolate, so it is safe as long as no code
-// caches a `getUserConfig` result across an init.
-let _users: LX.User[] = []
+// Module-level per-user config, written only by `setUsersContext` from the DO's
+// `loadAndInit`/WS-upgrade paths (REVIEW M6). It is a Map keyed by user name
+// because a single isolate can host several UserSyncDOs: one user's init must
+// never evict another user's config while that user's sync is running (each
+// entry is upserted, not replaced wholesale).
+const _users = new Map<string, LX.User>()
 let _defaultMaxSnapshotNum = 10
 
 export const setUsersContext = (
   users: LX.User[],
   defaultMaxSnapshotNum: number,
 ) => {
-  _users = users
+  for (const user of users) _users.set(user.name, user)
   _defaultMaxSnapshotNum = defaultMaxSnapshotNum
+}
+
+// Drops a purged/deleted user's config so a stale entry cannot leak into a
+// later incarnation of the same name.
+export const removeUserContext = (userName: string) => {
+  _users.delete(userName)
 }
 
 export interface UserConfig {
@@ -26,7 +31,7 @@ export interface UserConfig {
 }
 
 export const getUserConfig = (userName: string): UserConfig => {
-  const user = _users.find((u) => u.name === userName)
+  const user = _users.get(userName)
   if (!user) throw new Error(`user not found: ${userName}`)
   return {
     maxSnapshotNum: user.maxSnapshotNum ?? _defaultMaxSnapshotNum,
@@ -55,6 +60,9 @@ export class UserDataManage {
   userName: string
   private storage: DurableObjectStorage
   devicesInfo: DevicesInfo
+  // Purge support: an in-flight auth handler must not rewrite the device list
+  // after the DO's storage was wiped.
+  private disposed = false
 
   constructor(devicesInfo: DevicesInfo, storage: DurableObjectStorage) {
     this.userName = devicesInfo.userName
@@ -63,7 +71,12 @@ export class UserDataManage {
   }
 
   private saveDevicesInfo = (): Promise<void> => {
+    if (this.disposed) return Promise.resolve()
     return this.storage.put('devices', this.devicesInfo)
+  }
+
+  dispose = () => {
+    this.disposed = true
   }
 
   getAllClientKeyInfo = (): LX.Sync.KeyInfo[] => {
@@ -73,6 +86,7 @@ export class UserDataManage {
   }
 
   saveClientKeyInfo = async (keyInfo: LX.Sync.KeyInfo): Promise<void> => {
+    if (this.disposed) return
     if (
       this.devicesInfo.clients[keyInfo.clientId] == null &&
       Object.keys(this.devicesInfo.clients).length >= 100
@@ -88,6 +102,7 @@ export class UserDataManage {
   }
 
   removeClientKeyInfo = async (clientId: string): Promise<void> => {
+    if (this.disposed) return
     // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete this.devicesInfo.clients[clientId]
     await this.saveDevicesInfo()
