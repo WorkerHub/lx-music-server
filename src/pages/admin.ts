@@ -60,6 +60,15 @@ body.modal-open { overflow: hidden; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .topbar h1 { font-size: 20px; margin: 0 0 4px; }
 .topbar-actions { display: flex; gap: 8px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.tab {
+  border: none; background: transparent; color: var(--muted); font: inherit;
+  padding: 8px 12px; cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 h2 { font-size: 16px; margin: 0; }
 .muted { color: var(--muted); }
 .center { text-align: center; }
@@ -135,6 +144,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 @media (max-width: 640px) {
   .wrap { padding: 16px 12px 48px; }
   .card { padding: 14px; }
+  .tabs { flex-wrap: wrap; }
   .actions-col { white-space: normal; }
   .row-actions { flex-wrap: wrap; }
 }
@@ -148,6 +158,7 @@ const adminScript = `
   var STATUS_LABELS = { active: '正常', pending: '待批准', disabled: '已禁用' }
   var SOURCE_LABELS = { imported: '部署导入', self: '自助注册', admin: '管理员添加' }
   var MODE_LABELS = { closed: '关闭注册', open: '开放注册', approval: '需批准' }
+  var TABS = { users: '#users', settings: '#settings' }
 
   var state = { users: [], orphans: [], mode: 'approval', modeReady: false }
   var modalState = {
@@ -160,6 +171,18 @@ const adminScript = `
 
   function $(id) {
     return document.getElementById(id)
+  }
+
+  function tabFromHash() {
+    return location.hash === TABS.settings ? 'settings' : 'users'
+  }
+
+  function activateTab(tab) {
+    var name = tab === 'settings' ? 'settings' : 'users'
+    $('tab-users').classList.toggle('active', name === 'users')
+    $('tab-settings').classList.toggle('active', name === 'settings')
+    $('tab-panel-users').hidden = name !== 'users'
+    $('tab-panel-settings').hidden = name !== 'settings'
   }
 
   function el(tag, className, text) {
@@ -319,6 +342,7 @@ const adminScript = `
     closeModal()
     $('boot').hidden = true
     $('panel-view').hidden = true
+    $('tabs').hidden = true
     $('session-actions').hidden = true
     $('login-view').hidden = false
     $('login-password').value = ''
@@ -336,7 +360,9 @@ const adminScript = `
     $('boot').hidden = true
     $('login-view').hidden = true
     $('panel-view').hidden = false
+    $('tabs').hidden = false
     $('session-actions').hidden = false
+    activateTab(tabFromHash())
   }
 
   async function loadUsers() {
@@ -1175,6 +1201,20 @@ const adminScript = `
       })
     }
 
+    $('tab-users').addEventListener('click', function () {
+      activateTab('users')
+      location.hash = TABS.users
+    })
+
+    $('tab-settings').addEventListener('click', function () {
+      activateTab('settings')
+      location.hash = TABS.settings
+    })
+
+    window.addEventListener('hashchange', function () {
+      activateTab(tabFromHash())
+    })
+
     $('modal-close').addEventListener('click', closeModal)
     $('modal-cancel').addEventListener('click', closeModal)
     $('modal-submit').addEventListener('click', runModalSubmit)
@@ -1252,107 +1292,116 @@ ${adminStyles}
   </section>
 
   <div id="panel-view" hidden>
-    <section class="card">
-      <div class="section-head">
-        <h2>用户</h2>
-        <span class="muted" id="users-count"></span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>用户名</th>
-              <th>状态</th>
-              <th>来源</th>
-              <th>创建时间</th>
-              <th>设备数</th>
-              <th>快照上限</th>
-              <th class="actions-col">操作</th>
-            </tr>
-          </thead>
-          <tbody id="users-body"></tbody>
-        </table>
-      </div>
-      <p class="empty" id="users-empty" hidden>还没有用户，用下面的表单添加第一个。</p>
-    </section>
+    <nav class="tabs" id="tabs" hidden>
+      <button class="tab" id="tab-users" type="button">用户管理</button>
+      <button class="tab" id="tab-settings" type="button">系统设置</button>
+    </nav>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>添加用户</h2>
-        <span class="muted">管理员创建的账号直接可用，无需批准</span>
-      </div>
-      <form class="grid-form" id="add-form" novalidate>
-        <label class="field">
-          <span class="field-label">用户名</span>
-          <input id="add-name" type="text" autocomplete="off" maxlength="32" required>
-          <span class="hint">3–32 位字母、数字、下划线或短横线</span>
-        </label>
-        <label class="field">
-          <span class="field-label">密码</span>
-          <input id="add-password" type="password" autocomplete="new-password" required>
-          <span class="hint" id="add-password-hint">至少 8 位，建议 16 位以上随机密码</span>
-        </label>
-        <label class="field">
-          <span class="field-label">快照上限（可选）</span>
-          <input id="add-max" type="number" min="1" max="100" step="1" placeholder="默认 20">
-        </label>
-        <label class="field">
-          <span class="field-label">音乐添加位置</span>
-          <select id="add-location">
-            <option value="bottom">底部（默认）</option>
-            <option value="top">顶部</option>
-          </select>
-        </label>
-        <div class="form-actions">
-          <button class="btn primary" id="add-submit" type="submit">添加用户</button>
+    <div id="tab-panel-users">
+      <section class="card">
+        <div class="section-head">
+          <h2>用户</h2>
+          <span class="muted" id="users-count"></span>
         </div>
-        <p class="form-error" id="add-error" hidden></p>
-      </form>
-    </section>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>状态</th>
+                <th>来源</th>
+                <th>创建时间</th>
+                <th>设备数</th>
+                <th>快照上限</th>
+                <th class="actions-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="users-empty" hidden>还没有用户，用下面的表单添加第一个。</p>
+      </section>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>数据残留</h2>
-        <span class="muted">已删除账号保留的同步数据</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>用户名</th>
-              <th>来源</th>
-              <th>删除时间</th>
-              <th>数据状态</th>
-              <th class="actions-col">操作</th>
-            </tr>
-          </thead>
-          <tbody id="orphans-body"></tbody>
-        </table>
-      </div>
-      <p class="empty" id="orphans-empty" hidden>没有保留的同步数据。</p>
-    </section>
+      <section class="card">
+        <div class="section-head">
+          <h2>添加用户</h2>
+          <span class="muted">管理员创建的账号直接可用，无需批准</span>
+        </div>
+        <form class="grid-form" id="add-form" novalidate>
+          <label class="field">
+            <span class="field-label">用户名</span>
+            <input id="add-name" type="text" autocomplete="off" maxlength="32" required>
+            <span class="hint">3–32 位字母、数字、下划线或短横线</span>
+          </label>
+          <label class="field">
+            <span class="field-label">密码</span>
+            <input id="add-password" type="password" autocomplete="new-password" required>
+            <span class="hint" id="add-password-hint">至少 8 位，建议 16 位以上随机密码</span>
+          </label>
+          <label class="field">
+            <span class="field-label">快照上限（可选）</span>
+            <input id="add-max" type="number" min="1" max="100" step="1" placeholder="默认 20">
+          </label>
+          <label class="field">
+            <span class="field-label">音乐添加位置</span>
+            <select id="add-location">
+              <option value="bottom">底部（默认）</option>
+              <option value="top">顶部</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button class="btn primary" id="add-submit" type="submit">添加用户</button>
+          </div>
+          <p class="form-error" id="add-error" hidden></p>
+        </form>
+      </section>
+    </div>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>注册设置</h2>
-        <span class="muted">切换后立即生效</span>
-      </div>
-      <div class="mode-options" id="mode-options">
-        <label class="mode-option">
-          <input type="radio" name="registrationMode" value="closed">
-          <span><strong>关闭注册</strong><span class="muted">仅管理员可添加用户</span></span>
-        </label>
-        <label class="mode-option">
-          <input type="radio" name="registrationMode" value="approval">
-          <span><strong>需批准（默认）</strong><span class="muted">注册后为待批准，管理员批准后可用</span></span>
-        </label>
-        <label class="mode-option">
-          <input type="radio" name="registrationMode" value="open">
-          <span><strong>开放注册</strong><span class="muted">注册后立即可用</span></span>
-        </label>
-      </div>
-      <p class="hint" id="mode-hint">注册页地址：/register；切换后立即生效。</p>
-    </section>
+    <div id="tab-panel-settings" hidden>
+      <section class="card">
+        <div class="section-head">
+          <h2>注册设置</h2>
+          <span class="muted">切换后立即生效</span>
+        </div>
+        <div class="mode-options" id="mode-options">
+          <label class="mode-option">
+            <input type="radio" name="registrationMode" value="closed">
+            <span><strong>关闭注册</strong><span class="muted">仅管理员可添加用户</span></span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="registrationMode" value="approval">
+            <span><strong>需批准（默认）</strong><span class="muted">注册后为待批准，管理员批准后可用</span></span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="registrationMode" value="open">
+            <span><strong>开放注册</strong><span class="muted">注册后立即可用</span></span>
+          </label>
+        </div>
+        <p class="hint" id="mode-hint">注册页地址：/register；切换后立即生效。</p>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>数据残留</h2>
+          <span class="muted">已删除账号保留的同步数据</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>来源</th>
+                <th>删除时间</th>
+                <th>数据状态</th>
+                <th class="actions-col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="orphans-body"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="orphans-empty" hidden>没有保留的同步数据。</p>
+      </section>
+    </div>
   </div>
 </main>
 
