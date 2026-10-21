@@ -28,7 +28,7 @@ describe('page routes', () => {
       "default-src 'none'",
     )
     expect(res.headers.get('x-frame-options')).toBe('DENY')
-    expect(await res.text()).toContain('LX Music 管理面板')
+    expect(await res.text()).toContain('LX Music server 管理面板')
   })
 
   it('always serves the register page', async () => {
@@ -279,7 +279,6 @@ describe('page markup safety', () => {
     const fields = [
       'about-version',
       'about-commit',
-      'about-commit-short',
       'about-built',
       'about-repo',
     ]
@@ -1361,5 +1360,121 @@ describe('admin theme switch and brand assets', () => {
     )
     expect(select).toContain('storeThemeMode(mode)')
     expect(select).toContain('applyTheme(mode)')
+  })
+})
+
+describe('admin panel layout and about page polish (WK-22)', () => {
+  it('uses the "LX Music server 管理面板" wording for the page title and the about hero', () => {
+    expect(adminPageHtml).toContain('<h1>LX Music server 管理面板</h1>')
+    expect(adminPageHtml).not.toContain('<h1>LX Music 管理面板</h1>')
+    expect(adminPageHtml).toContain(
+      '<h2>LX Music server 管理面板</h2>\n        <p class="muted">LX Music 同步服务的管理后台</p>',
+    )
+    // 大标题、关于页 hero 与关于页「产品名称」行三处统一口径。
+    expect(adminPageHtml.split('LX Music server 管理面板')).toHaveLength(4)
+  })
+
+  it('uses the new subtitle under the admin page heading', () => {
+    expect(adminPageHtml).toContain(
+      '<p class="muted">一个兼容官方同步协议的重构版</p>',
+    )
+    expect(adminPageHtml).not.toContain('管理同步账号、注册模式与保留数据')
+    // 浏览器标题保持原样。
+    expect(adminPageHtml).toContain('<title>管理面板 · LX Music Server</title>')
+  })
+
+  it('gives the user table its own layout so the action column hugs the right edge', () => {
+    expect(adminPageHtml).toContain('<table class="users-table">')
+    expect(adminPageHtml).toContain(
+      '.users-table { table-layout: auto; width: 100%; }',
+    )
+    expect(adminPageHtml).toContain(
+      '.users-table th, .users-table td { white-space: nowrap; }',
+    )
+    expect(adminPageHtml).toContain(
+      '.users-table th:first-child, .users-table td:first-child { width: 100%; }',
+    )
+    expect(adminPageHtml).toContain(
+      '.users-table th.actions-col, .users-table td.actions-col { text-align: right; }',
+    )
+    expect(adminPageHtml).toContain(
+      '.users-table .row-actions { justify-content: flex-end; flex-wrap: nowrap; }',
+    )
+    // 数字列与表头同步右对齐。
+    expect(adminPageHtml).toContain(
+      '.users-table th:nth-child(5), .users-table td:nth-child(5),\n.users-table th:nth-child(6), .users-table td:nth-child(6) { text-align: right; }',
+    )
+    // 内边距不变，横向滚动容器保留。
+    expect(adminPageHtml).toContain(
+      'th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }',
+    )
+    expect(adminPageHtml).toContain('.table-wrap { overflow-x: auto; }')
+    expect(adminPageHtml).toContain(
+      '<div class="table-wrap" id="users-table-wrap">',
+    )
+    // 全局 .actions-col / .row-actions 保持原样，残留数据表布局不变。
+    expect(adminPageHtml).toContain('.actions-col { white-space: nowrap; }')
+    expect(adminPageHtml).toContain(
+      '.row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }',
+    )
+  })
+
+  it('keeps the action buttons and their bindings untouched', () => {
+    for (const label of [
+      '批准',
+      '拒绝',
+      '禁用',
+      '启用',
+      '编辑配置',
+      '重置密码',
+      '设备',
+      '删除账号',
+    ]) {
+      expect(adminPageHtml).toContain(`'${label}'`)
+    }
+    expect(adminPageHtml).toContain("var actionCell = el('td', 'actions-col')")
+    expect(adminPageHtml).toContain("var group = el('div', 'row-actions')")
+  })
+
+  it('drops the debug leftovers from the about page', () => {
+    expect(adminPageHtml).not.toContain('about-commit-short')
+    expect(adminPageHtml).not.toContain('about-hash')
+    expect(adminPageHtml).not.toContain('由部署流程注入')
+    // 构建信息卡五行与它们的 JS 赋值仍然完整。
+    for (const id of ['about-version', 'about-commit', 'about-built']) {
+      expect(adminPageHtml).toContain(`id="${id}"`)
+      expect(adminPageHtml).toContain(`$('${id}').textContent`)
+    }
+    // 源码仓库行是静态链接，不经过 JS 赋值。
+    expect(adminPageHtml).toContain('id="about-repo"')
+    expect(adminPageHtml).toContain('<dt>产品名称</dt>')
+    expect(adminPageHtml).toContain('<dt>版本号</dt>')
+    expect(adminPageHtml).toContain('<dt>构建哈希</dt>')
+    expect(adminPageHtml).toContain('<dt>构建时间</dt>')
+    expect(adminPageHtml).toContain('<dt>源码仓库</dt>')
+  })
+
+  it('credits the upstream project with safe external links', () => {
+    const aboutTab = adminPageHtml.slice(
+      adminPageHtml.indexOf('<div id="tab-panel-about"'),
+      adminPageHtml.indexOf('<div class="modal" id="modal"'),
+    )
+    expect(aboutTab).toContain('致谢')
+    expect(aboutTab).toContain(
+      '本项目是 <a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">原始项目</a> 的重构版本',
+    )
+    for (const repo of [
+      'lx-music-sync-server',
+      'lx-music-desktop',
+      'lx-music-mobile',
+    ]) {
+      const href = `href="https://github.com/lyswhut/${repo}" target="_blank" rel="noopener noreferrer"`
+      expect(aboutTab).toContain(href)
+    }
+    // 致谢卡排在构建信息卡之后，并复用 about-list 样式。
+    expect(aboutTab.indexOf('构建信息')).toBeLessThan(aboutTab.indexOf('致谢'))
+    const creditSection = aboutTab.slice(aboutTab.indexOf('致谢'))
+    expect(creditSection).toContain('<dl class="about-list">')
+    expect(creditSection).toContain('<div class="about-row">')
   })
 })
