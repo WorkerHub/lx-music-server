@@ -155,6 +155,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .todo-item:hover { border-color: var(--muted); }
 .todo-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .todo-arrow { color: var(--muted); }
+.todo-unknown {
+  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
+  border-radius: 8px; color: var(--muted);
+}
 .chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 8px; }
 .chart-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
 .chart-bar { width: 100%; background: var(--primary); border-radius: 2px 2px 0 0; }
@@ -194,14 +198,14 @@ const adminScript = `
   var TABS = { home: '#home', users: '#users', settings: '#settings', about: '#about' }
   var DEFAULT_TAB = 'home'
   var ACTIVITY_DAYS = 30
-  // The repository link is applied with setAttribute so the document itself
-  // never references an external origin (the page's own guard and CSP treat
-  // that as a loaded resource, while an anchor is only user navigation).
-  var REPO_URL = 'https://github.com/WorkerHub/lx-music-server'
+  var UNKNOWN = '—'
 
   var state = {
     users: [],
     orphans: [],
+    // Only true after /api/admin/orphans succeeded. The home dashboard must
+    // show "unknown" instead of a confident 0 when the list never arrived.
+    orphansLoaded: false,
     mode: 'approval',
     modeReady: false,
     build: null
@@ -444,8 +448,20 @@ const adminScript = `
   }
 
   async function loadOrphans() {
-    var data = await api('/api/admin/orphans')
-    state.orphans = Array.isArray(data) ? data : []
+    var data
+    try {
+      data = await api('/api/admin/orphans')
+      if (!Array.isArray(data)) throw new ApiError(502, data)
+    } catch (err) {
+      // The list is unknown, not empty: drop back to the unknown state so the
+      // home KPI and todo list never claim "0 条数据残留".
+      state.orphans = []
+      state.orphansLoaded = false
+      renderHome()
+      throw err
+    }
+    state.orphans = data
+    state.orphansLoaded = true
     renderOrphans()
   }
 
@@ -705,7 +721,9 @@ const adminScript = `
     $('kpi-users').textContent = String(state.users.length)
     $('kpi-devices').textContent = String(deviceTotal())
     $('kpi-pending').textContent = String(pending)
-    $('kpi-orphans').textContent = String(state.orphans.length)
+    $('kpi-orphans').textContent = state.orphansLoaded
+      ? String(state.orphans.length)
+      : UNKNOWN
     renderTodo(pending)
     renderRecent()
     renderActivity()
@@ -714,16 +732,26 @@ const adminScript = `
   function renderTodo(pending) {
     var list = $('todo-list')
     clear(list)
-    var orphans = state.orphans.length
-    if (pending === 0 && orphans === 0) {
-      list.appendChild(el('p', 'empty', '暂无待处理事项'))
-      return
-    }
+
     if (pending > 0) {
       list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
     }
-    if (orphans > 0) {
-      list.appendChild(todoItem(orphans + ' 条数据残留待处理', 'settings'))
+
+    if (state.orphansLoaded) {
+      if (state.orphans.length > 0) {
+        list.appendChild(
+          todoItem(state.orphans.length + ' 条数据残留待处理', 'settings')
+        )
+      }
+    } else {
+      // Unknown, so neither a count nor "暂无待处理事项" is honest here.
+      list.appendChild(
+        el('p', 'todo-unknown', '数据残留待处理：—（暂时无法获取，请刷新后重试）')
+      )
+    }
+
+    if (list.childNodes.length === 0) {
+      list.appendChild(el('p', 'empty', '暂无待处理事项'))
     }
   }
 
@@ -1424,6 +1452,7 @@ const adminScript = `
       if (!loggedOut) return
       state.users = []
       state.orphans = []
+      state.orphansLoaded = false
       notice('已退出登录', 'ok')
       showLogin('')
     })
@@ -1513,10 +1542,6 @@ const adminScript = `
     for (var t = 0; t < TAB_ORDER.length; t++) {
       bindTab(TAB_ORDER[t])
     }
-
-    // The repository link is a navigation target, not a loaded resource, so its
-    // href is applied here instead of living in the static markup.
-    $('about-repo').setAttribute('href', REPO_URL)
 
     window.addEventListener('hashchange', function () {
       var tab = tabFromHash()
@@ -1624,7 +1649,7 @@ ${adminStyles}
         </div>
         <div class="card kpi">
           <span class="kpi-label">数据残留</span>
-          <strong class="kpi-value" id="kpi-orphans">0</strong>
+          <strong class="kpi-value" id="kpi-orphans">—</strong>
         </div>
       </section>
 
@@ -1806,7 +1831,7 @@ ${adminStyles}
           <div class="about-row">
             <dt>源码仓库</dt>
             <dd>
-              <a id="about-repo" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
+              <a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
             </dd>
           </div>
         </dl>
