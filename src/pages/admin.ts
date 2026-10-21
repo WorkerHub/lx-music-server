@@ -222,9 +222,12 @@ const adminScript = `
     mode: 'approval',
     // The registration mode read is a three-outcome affair, not a boolean:
     // 'idle' (not requested yet), 'loading' (request in flight), 'ready' (mode
-    // is known) and 'error' (the request failed). Only 'error' may claim a
-    // failure — a pending read used to borrow that copy, so a fresh login
-    // showed "读取失败" for the ~1.5s before /api/registration-info returned.
+    // is known) and 'error' (no mode to show: the read failed, or the panel
+    // load failed before the read could even be sent — enterPanel() settles
+    // that case, but only while the state is still 'idle', so a concurrent
+    // read's result is never overwritten). Only 'error' may claim a failure —
+    // a pending read used to borrow that copy, so a fresh login showed
+    // "读取失败" for the ~1.5s before /api/registration-info returned.
     modeStatus: 'idle',
     build: null
   }
@@ -790,8 +793,10 @@ const adminScript = `
       radios[i].checked = radios[i].value === state.mode
       radios[i].disabled = !ready
     }
-    // Three distinct copies for three distinct situations: the failure text is
-    // reserved for a read that actually failed (modeStatus === 'error').
+    // Three distinct copies for three distinct situations: the ready copy, the
+    // failure copy (reserved for a settled 'error' — the read itself failed, or
+    // the panel load failed before it could be sent) and the neutral one, which
+    // only ever shows while the panel is still loading.
     $('mode-hint').textContent = ready
       ? '注册页地址：/register；切换后立即生效。'
       : state.modeStatus === 'error'
@@ -1543,6 +1548,19 @@ const adminScript = `
       await loadUsers(epoch)
     } catch (err) {
       if (handleAuth(err)) return
+      // The mode read is sequenced behind the user list, so this failure may
+      // mean /api/registration-info was never sent: left on the neutral copy,
+      // the settings hint would wait forever for a request that will not
+      // happen. Collapse to the failure copy only while the mode state is still
+      // untouched — a 刷新 click during this very request starts loadMode()
+      // concurrently, and its 'loading' (and later 'ready', a mode that was
+      // really read) must not be overwritten here. 'idle' is exactly "no read
+      // in flight and none settled": loadMode() sets 'loading' before its
+      // first await, and resetData() puts the state back to 'idle' on logout.
+      if (state.modeStatus === 'idle') {
+        state.modeStatus = 'error'
+        renderMode()
+      }
       notice(messageFor(err), 'err')
       return
     }

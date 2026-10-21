@@ -480,6 +480,173 @@ describe('page markup safety', () => {
     }
   })
 
+  it('settles the registration mode when the panel load fails before the read', () => {
+    // enterPanel() reads the user list first and returns early when it fails,
+    // so /api/registration-info is never sent at all. Left on the neutral copy
+    // the settings hint waits forever for a request that will not happen, so
+    // the panel-level failure has to settle the mode region on its own.
+    const enterPanel = section(
+      'async function enterPanel',
+      'function bindEvents',
+    )
+    const usersCatch = enterPanel.slice(
+      enterPanel.indexOf('await loadUsers(epoch)'),
+      enterPanel.indexOf('if (epoch !== sessionEpoch) return'),
+    )
+    // Comments talk about loadMode()/the request, so only the executable lines
+    // are checked: a comment must not satisfy (or fail) any assertion here.
+    // Block comments are stripped too — and the behavioural test below settles
+    // the string-literal case by running the real function.
+    const usersCatchCode = usersCatch
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+    // Deleting either line (or moving them out of this catch) leaves the hint
+    // on "正在读取注册模式…" and turns this red.
+    expect(usersCatchCode).toContain("state.modeStatus = 'error'")
+    expect(usersCatchCode).toContain('renderMode()')
+    // A state change is not a repaint: the hint has to be painted before the
+    // early return, otherwise the user keeps the loading copy.
+    expect(usersCatchCode.indexOf("state.modeStatus = 'error'")).toBeLessThan(
+      usersCatchCode.indexOf('renderMode()'),
+    )
+    expect(usersCatchCode.indexOf('renderMode()')).toBeLessThan(
+      usersCatchCode.indexOf('notice('),
+    )
+    // ...and only while the mode state is still untouched (a 刷新 click during
+    // this same request starts loadMode() concurrently, and its result must
+    // not be overwritten here) — pinned behaviourally below, so either guard
+    // form passes. Settled locally: no second /api/registration-info, no
+    // request at all.
+    expect(usersCatchCode).not.toContain('loadMode(')
+    expect(usersCatchCode).not.toContain('api(')
+
+    // The state it lands on is the one that renders the failure copy: the
+    // failure branch is checked before the neutral fallback, so 'error' can
+    // never paint "正在读取".
+    const renderMode = section('function renderMode', '// --- Home dashboard')
+    expect(renderMode).toContain("state.modeStatus === 'error'")
+    expect(renderMode.indexOf("state.modeStatus === 'error'")).toBeLessThan(
+      renderMode.indexOf('注册模式读取失败，请刷新页面重试。'),
+    )
+    expect(
+      renderMode.indexOf('注册模式读取失败，请刷新页面重试。'),
+    ).toBeLessThan(renderMode.indexOf('正在读取注册模式…'))
+    // Every branch of the hint is a fixed literal, so no state (this one
+    // included) can paint `undefined` into the region.
+    expect(renderMode).toContain("'注册页地址：/register；切换后立即生效。'")
+    expect(renderMode).toContain("'注册模式读取失败，请刷新页面重试。'")
+    expect(renderMode).toContain("'正在读取注册模式…'")
+
+    // The radios stay disabled: this path never reaches 'ready'.
+    expect(renderMode).toContain("var ready = state.modeStatus === 'ready'")
+    expect(renderMode).toContain('radios[i].disabled = !ready')
+  })
+
+  // The page ships as one inline script, so a source-level assertion cannot see
+  // whether the failure branch overwrites a mode that a concurrent 刷新 already
+  // loaded. This runs the real enterPanel() body (extracted from the page) with
+  // the panel state and the collaborators it calls injected, so the assertions
+  // below are on what the function actually does to `state`.
+  const runEnterPanel = async (options: {
+    modeStatus: string
+    mode?: string
+    usersFail?: boolean
+  }) => {
+    const source = section('async function enterPanel', 'function bindEvents')
+    const state: { mode: string; modeStatus: string } = {
+      mode: options.mode ?? '',
+      modeStatus: options.modeStatus,
+    }
+    const calls: string[] = []
+    const sessionEpoch = 7
+    const build = new Function(
+      'state',
+      'sessionEpoch',
+      'showPanel',
+      'loadUsers',
+      'handleAuth',
+      'renderMode',
+      'notice',
+      'messageFor',
+      'loadOrphans',
+      'loadMode',
+      'loadBuildInfo',
+      `${source}\nreturn enterPanel`,
+    ) as (...args: any[]) => any
+    const enterPanel = build(
+      state,
+      sessionEpoch,
+      () => calls.push('showPanel'),
+      async (epoch: number) => {
+        calls.push(`loadUsers:${epoch}`)
+        if (options.usersFail) {
+          throw Object.assign(new Error('boom'), { status: 500 })
+        }
+      },
+      () => {
+        calls.push('handleAuth')
+        return false
+      },
+      () => calls.push('renderMode'),
+      (message: string) => calls.push(`notice:${message}`),
+      (err: { status: number }) => `HTTP ${err.status}`,
+      async () => calls.push('loadOrphans'),
+      async () => {
+        calls.push('loadMode')
+        // The real loader announces the read before awaiting it.
+        state.modeStatus = 'loading'
+      },
+      async () => calls.push('loadBuildInfo'),
+    ) as () => Promise<void>
+    await enterPanel()
+    return { state, calls }
+  }
+
+  it('collapses a panel-level failure only while the mode state is untouched', async () => {
+    // Nothing read the mode yet: the hint must settle on the failure copy
+    // instead of waiting for a request that was never sent.
+    const idle = await runEnterPanel({ modeStatus: 'idle', usersFail: true })
+    expect(idle.state.modeStatus).toBe('error')
+    expect(idle.calls).toContain('renderMode')
+    expect(idle.calls).toContain('notice:HTTP 500')
+    // Settled locally: the read itself was never dispatched.
+    expect(idle.calls).not.toContain('loadMode')
+    expect(idle.calls).not.toContain('loadOrphans')
+
+    // A 刷新 click during that same request already loaded the real mode. This
+    // later failure must not repaint it as a failure (contract 2 + 4).
+    const ready = await runEnterPanel({
+      modeStatus: 'ready',
+      mode: 'open',
+      usersFail: true,
+    })
+    expect(ready.state.modeStatus).toBe('ready')
+    expect(ready.state.mode).toBe('open')
+    expect(ready.calls).not.toContain('renderMode')
+
+    // A read still in flight owns the hint: the failure branch leaves it alone
+    // and loadMode() settles it afterwards.
+    const loading = await runEnterPanel({
+      modeStatus: 'loading',
+      usersFail: true,
+    })
+    expect(loading.state.modeStatus).toBe('loading')
+    expect(loading.calls).not.toContain('renderMode')
+
+    // A read that already failed keeps its own verdict.
+    const failed = await runEnterPanel({
+      modeStatus: 'error',
+      usersFail: true,
+    })
+    expect(failed.state.modeStatus).toBe('error')
+    expect(failed.calls).not.toContain('renderMode')
+
+    // The successful path is untouched: the mode read still starts.
+    const ok = await runEnterPanel({ modeStatus: 'idle' })
+    expect(ok.calls).toContain('loadMode')
+    expect(ok.state.modeStatus).toBe('loading')
+  })
+
   it('routes every session exit through endSession()', () => {
     // 1. Logout button.
     const logout = section(
