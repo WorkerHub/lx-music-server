@@ -44,18 +44,29 @@ const pages: Array<[string, string]> = [
   ['register', registerPageHtml],
 ]
 
-// Patterns that actually fetch or render a remote resource. A plain
+// Markup that makes the browser fetch something from another origin. A plain
 // `<a href="https://...">` is user navigation, not a load, so it is allowed on
-// purpose (the about tab links to the public repository). The list is narrow
-// enough to stay honest and wide enough to still catch real violations — see
-// the self-test below.
-const EXTERNAL_RESOURCE_PATTERNS: Array<[string, RegExp]> = [
-  ['src', /\bsrc\s*=\s*["'](?:https?:)?\/\//],
-  ['srcset', /\bsrcset\s*=\s*["'](?:https?:)?\/\//],
-  ['<link href>', /<link\b[^>]*\bhref\s*=\s*["'](?:https?:)?\/\//i],
-  ['@import', /@import/],
-  ['css url()', /url\(\s*["']?(?:https?:)?\/\//],
-]
+// purpose (the about tab links to the public repository).
+//
+// Rules: matching is case-insensitive (HTML attribute names and CSS function
+// names are), quoted and unquoted attribute values are both caught, and every
+// element that can pull a resource is covered: src/srcset (script, img, iframe,
+// video, audio, source, embed, track, input…), <link href> (stylesheet,
+// preload, icon), object/embed `data`, iframe `srcdoc`, CSS `url()` and
+// `@import`.
+//
+// `@import` is banned unconditionally, including same-origin and relative
+// imports: both pages are single self-contained documents, so any import is a
+// violation. The self-test below pins that policy down.
+const EXTERNAL_RESOURCE_PATTERNS: Record<string, RegExp> = {
+  src: /\bsrc\s*=\s*["']?(?:https?:)?\/\//i,
+  srcset: /\bsrcset\s*=\s*["']?(?:https?:)?\/\//i,
+  'object data': /\bdata\s*=\s*["']?(?:https?:)?\/\//i,
+  'iframe srcdoc': /\bsrcdoc\s*=\s*["']?(?:https?:)?\/\//i,
+  '<link href>': /<link\b[^>]*\bhref\s*=\s*["']?(?:https?:)?\/\//i,
+  '@import': /@import/i,
+  'css url()': /url\(\s*["']?(?:https?:)?\/\//i,
+}
 
 describe('page markup safety', () => {
   for (const [name, html] of pages) {
@@ -66,24 +77,51 @@ describe('page markup safety', () => {
     })
 
     it(`${name} page loads no external resources`, () => {
-      for (const [label, pattern] of EXTERNAL_RESOURCE_PATTERNS) {
+      for (const [label, pattern] of Object.entries(
+        EXTERNAL_RESOURCE_PATTERNS,
+      )) {
         expect(html, `external ${label}`).not.toMatch(pattern)
       }
     })
   }
 
   it('external resource guard still catches real loads', () => {
-    const violations = [
-      '<script src="https://cdn.example/x.js"></script>',
-      '<img src="//cdn.example/x.png">',
-      '<img srcset="https://cdn.example/x.png 1x">',
-      '<link rel="stylesheet" href="https://cdn.example/x.css">',
-      '<style>@import "x.css";</style>',
-      '<style>.a { background: url(https://cdn.example/x.png); }</style>',
+    // Every entry must be caught by the named rule, so a rule cannot silently
+    // stop covering the variant it exists for.
+    const violations: Array<[string, string]> = [
+      ['<script src="https://cdn.example/x.js"></script>', 'src'],
+      ['<script src=https://cdn.example/x.js></script>', 'src'],
+      ['<SCRIPT SRC="https://cdn.example/x.js"></SCRIPT>', 'src'],
+      ['<img src="//cdn.example/x.png">', 'src'],
+      ['<img srcset="https://cdn.example/x.png 1x">', 'srcset'],
+      [
+        '<link rel="stylesheet" href="https://cdn.example/x.css">',
+        '<link href>',
+      ],
+      ['<link rel=stylesheet href=https://cdn.example/x.css>', '<link href>'],
+      ['<object data="https://cdn.example/x.swf"></object>', 'object data'],
+      ['<iframe srcdoc="//cdn.example/x.html"></iframe>', 'iframe srcdoc'],
+      ['<style>@import "x.css";</style>', '@import'],
+      ['<style>@import url(https://cdn.example/x.css);</style>', '@import'],
+      [
+        '<style>.a { background: url(https://cdn.example/x.png); }</style>',
+        'css url()',
+      ],
+      [
+        '<style>.a { background: URL(https://cdn.example/x.png); }</style>',
+        'css url()',
+      ],
     ]
-    for (const sample of violations) {
+    for (const [sample, label] of violations) {
+      expect(EXTERNAL_RESOURCE_PATTERNS[label], label).toBeDefined()
       expect(
-        EXTERNAL_RESOURCE_PATTERNS.some(([, pattern]) => pattern.test(sample)),
+        EXTERNAL_RESOURCE_PATTERNS[label].test(sample),
+        `${label}: ${sample}`,
+      ).toBe(true)
+      expect(
+        Object.values(EXTERNAL_RESOURCE_PATTERNS).some((pattern) =>
+          pattern.test(sample),
+        ),
         sample,
       ).toBe(true)
     }
@@ -91,12 +129,16 @@ describe('page markup safety', () => {
     // Same-origin or inline references are not external loads.
     const allowed = [
       '<script src="/static/app.js"></script>',
+      '<img src="data:image/png;base64,AAAA">',
       '<link rel="icon" href="data:,">',
       '<a href="https://github.com/WorkerHub/lx-music-server">repo</a>',
+      '<a href=https://github.com/WorkerHub/lx-music-server>repo</a>',
     ]
     for (const sample of allowed) {
       expect(
-        EXTERNAL_RESOURCE_PATTERNS.some(([, pattern]) => pattern.test(sample)),
+        Object.values(EXTERNAL_RESOURCE_PATTERNS).some((pattern) =>
+          pattern.test(sample),
+        ),
         sample,
       ).toBe(false)
     }
@@ -267,5 +309,85 @@ describe('page markup safety', () => {
     expect(
       renderTodo.indexOf("el('p', 'empty', '暂无待处理事项')"),
     ).toBeGreaterThan(renderTodo.indexOf('list.childNodes.length === 0'))
+  })
+
+  it('drops both tables and the dashboard into an unavailable state on failure', () => {
+    expect(adminPageHtml).toContain('usersLoaded: false')
+    expect(adminPageHtml).toContain('orphansLoaded: false')
+    for (const id of [
+      'users-table-wrap',
+      'users-unavailable',
+      'orphans-table-wrap',
+      'orphans-unavailable',
+    ]) {
+      expect(adminPageHtml).toContain(`id="${id}"`)
+    }
+
+    // A failed load re-renders the table (not only the dashboard), so stale
+    // rows with live action buttons cannot survive a failed refresh.
+    const loadUsers = adminPageHtml.slice(
+      adminPageHtml.indexOf('async function loadUsers'),
+      adminPageHtml.indexOf('async function loadOrphans'),
+    )
+    expect(loadUsers).toContain('state.usersLoaded = false')
+    expect(loadUsers).toContain('state.usersLoaded = true')
+    expect(loadUsers).toContain('renderUsers()')
+    expect(loadUsers.indexOf('state.usersLoaded = false')).toBeLessThan(
+      loadUsers.indexOf('state.usersLoaded = true'),
+    )
+
+    const loadOrphans = adminPageHtml.slice(
+      adminPageHtml.indexOf('async function loadOrphans'),
+      adminPageHtml.indexOf('async function loadMode'),
+    )
+    expect(loadOrphans).toContain('state.orphansLoaded = false')
+    expect(loadOrphans).toContain('renderOrphans()')
+    expect(loadOrphans.indexOf('state.orphansLoaded = false')).toBeLessThan(
+      loadOrphans.indexOf('state.orphansLoaded = true'),
+    )
+
+    // Both renderers hide the table and show the unavailable note, and return
+    // before building any row/action buttons.
+    const renderOrphans = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderOrphans'),
+      adminPageHtml.indexOf('function renderMode'),
+    )
+    expect(renderOrphans).toContain("$('orphans-table-wrap').hidden = !loaded")
+    expect(renderOrphans).toContain("$('orphans-unavailable').hidden = loaded")
+    expect(renderOrphans.indexOf('if (!loaded)')).toBeLessThan(
+      renderOrphans.indexOf('恢复账号'),
+    )
+
+    const renderUsers = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderUsers'),
+      adminPageHtml.indexOf('function addUserActions'),
+    )
+    expect(renderUsers).toContain("$('users-table-wrap').hidden = !loaded")
+    expect(renderUsers).toContain("$('users-unavailable').hidden = loaded")
+    expect(renderUsers.indexOf('if (!loaded)')).toBeLessThan(
+      renderUsers.indexOf('addUserActions(group, user)'),
+    )
+
+    // Everything derived from the user list follows the same rule.
+    const renderHome = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderHome'),
+      adminPageHtml.indexOf('function renderTodo'),
+    )
+    expect(renderHome).toContain('var usersLoaded = state.usersLoaded')
+    expect(renderHome).toContain(
+      '$(' + "'kpi-users').textContent = usersLoaded",
+    )
+
+    const renderRecent = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderRecent'),
+      adminPageHtml.indexOf('function dayKey'),
+    )
+    expect(renderRecent).toContain('用户列表暂时无法获取')
+
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).toContain('bars.hidden = true')
   })
 })

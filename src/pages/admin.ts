@@ -155,6 +155,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .todo-item:hover { border-color: var(--muted); }
 .todo-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .todo-arrow { color: var(--muted); }
+.data-unavailable {
+  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
+  border-radius: 8px; color: var(--muted); background: var(--bg);
+}
 .todo-unknown {
   margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
   border-radius: 8px; color: var(--muted);
@@ -203,8 +207,10 @@ const adminScript = `
   var state = {
     users: [],
     orphans: [],
-    // Only true after /api/admin/orphans succeeded. The home dashboard must
-    // show "unknown" instead of a confident 0 when the list never arrived.
+    // Only true after the matching list request succeeded. Both the dashboard
+    // and the two tables render "unknown" instead of stale rows or a
+    // confident 0 when a list never arrived (or a refresh failed).
+    usersLoaded: false,
     orphansLoaded: false,
     mode: 'approval',
     modeReady: false,
@@ -442,8 +448,21 @@ const adminScript = `
   }
 
   async function loadUsers() {
-    var data = await api('/api/admin/users')
-    state.users = data && Array.isArray(data.users) ? data.users : []
+    var data
+    try {
+      data = await api('/api/admin/users')
+      if (!data || !Array.isArray(data.users)) throw new ApiError(502, data)
+    } catch (err) {
+      // Same policy as the orphan list: a failed refresh drops the table into
+      // its unavailable state instead of leaving rows with live action buttons
+      // that may act on stale data.
+      state.users = []
+      state.usersLoaded = false
+      renderUsers()
+      throw err
+    }
+    state.users = data.users
+    state.usersLoaded = true
     renderUsers()
   }
 
@@ -454,10 +473,11 @@ const adminScript = `
       if (!Array.isArray(data)) throw new ApiError(502, data)
     } catch (err) {
       // The list is unknown, not empty: drop back to the unknown state so the
-      // home KPI and todo list never claim "0 条数据残留".
+      // home KPI and the settings table never show stale data (or a 0) that a
+      // "彻底清理" click could act on.
       state.orphans = []
       state.orphansLoaded = false
-      renderHome()
+      renderOrphans()
       throw err
     }
     state.orphans = data
@@ -484,10 +504,18 @@ const adminScript = `
   function renderUsers() {
     var body = $('users-body')
     clear(body)
-    $('users-count').textContent = state.users.length
+    var loaded = state.usersLoaded
+
+    $('users-table-wrap').hidden = !loaded
+    $('users-unavailable').hidden = loaded
+    $('users-count').textContent = loaded && state.users.length
       ? '共 ' + state.users.length + ' 个账号'
       : ''
-    $('users-empty').hidden = state.users.length > 0
+    $('users-empty').hidden = !loaded || state.users.length > 0
+    if (!loaded) {
+      renderHome()
+      return
+    }
 
     state.users.forEach(function (user) {
       var row = el('tr')
@@ -644,7 +672,15 @@ const adminScript = `
   function renderOrphans() {
     var body = $('orphans-body')
     clear(body)
-    $('orphans-empty').hidden = state.orphans.length > 0
+    var loaded = state.orphansLoaded
+
+    $('orphans-table-wrap').hidden = !loaded
+    $('orphans-unavailable').hidden = loaded
+    $('orphans-empty').hidden = !loaded || state.orphans.length > 0
+    if (!loaded) {
+      renderHome()
+      return
+    }
 
     state.orphans.forEach(function (orphan) {
       var row = el('tr')
@@ -718,9 +754,12 @@ const adminScript = `
 
   function renderHome() {
     var pending = pendingTotal()
-    $('kpi-users').textContent = String(state.users.length)
-    $('kpi-devices').textContent = String(deviceTotal())
-    $('kpi-pending').textContent = String(pending)
+    var usersLoaded = state.usersLoaded
+    $('kpi-users').textContent = usersLoaded
+      ? String(state.users.length)
+      : UNKNOWN
+    $('kpi-devices').textContent = usersLoaded ? String(deviceTotal()) : UNKNOWN
+    $('kpi-pending').textContent = usersLoaded ? String(pending) : UNKNOWN
     $('kpi-orphans').textContent = state.orphansLoaded
       ? String(state.orphans.length)
       : UNKNOWN
@@ -733,8 +772,14 @@ const adminScript = `
     var list = $('todo-list')
     clear(list)
 
-    if (pending > 0) {
-      list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
+    if (state.usersLoaded) {
+      if (pending > 0) {
+        list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
+      }
+    } else {
+      list.appendChild(
+        el('p', 'todo-unknown', '注册待审批：—（暂时无法获取，请刷新后重试）')
+      )
     }
 
     if (state.orphansLoaded) {
@@ -768,12 +813,21 @@ const adminScript = `
   function renderRecent() {
     var body = $('recent-body')
     clear(body)
+    var empty = $('recent-empty')
+
+    if (!state.usersLoaded) {
+      empty.textContent = '用户列表暂时无法获取，请刷新后重试。'
+      empty.hidden = false
+      return
+    }
+
+    empty.textContent = '还没有注册记录。'
     var rows = state.users.slice()
     rows.sort(function (a, b) {
       return timestampOf(b.createdAt) - timestampOf(a.createdAt)
     })
     rows = rows.slice(0, 5)
-    $('recent-empty').hidden = rows.length > 0
+    empty.hidden = rows.length > 0
 
     rows.forEach(function (user) {
       var row = el('tr')
@@ -835,9 +889,19 @@ const adminScript = `
   }
 
   function renderActivity() {
-    var series = activitySeries()
     var bars = $('chart-bars')
     clear(bars)
+
+    if (!state.usersLoaded) {
+      // An all-zero chart would read as "no signups", so hide it and say why.
+      bars.hidden = true
+      $('chart-total').textContent = '近 30 天新增：—'
+      $('chart-range').textContent = '用户列表暂时无法获取，请刷新后重试。'
+      return
+    }
+
+    bars.hidden = false
+    var series = activitySeries()
 
     var peak = 0
     series.days.forEach(function (entry) {
@@ -1452,6 +1516,7 @@ const adminScript = `
       if (!loggedOut) return
       state.users = []
       state.orphans = []
+      state.usersLoaded = false
       state.orphansLoaded = false
       notice('已退出登录', 'ok')
       showLogin('')
@@ -1637,15 +1702,15 @@ ${adminStyles}
       <section class="kpi-grid">
         <div class="card kpi">
           <span class="kpi-label">用户总数</span>
-          <strong class="kpi-value" id="kpi-users">0</strong>
+          <strong class="kpi-value" id="kpi-users">—</strong>
         </div>
         <div class="card kpi">
           <span class="kpi-label">设备总数</span>
-          <strong class="kpi-value" id="kpi-devices">0</strong>
+          <strong class="kpi-value" id="kpi-devices">—</strong>
         </div>
         <div class="card kpi">
           <span class="kpi-label">待审批</span>
-          <strong class="kpi-value" id="kpi-pending">0</strong>
+          <strong class="kpi-value" id="kpi-pending">—</strong>
         </div>
         <div class="card kpi">
           <span class="kpi-label">数据残留</span>
@@ -1699,7 +1764,7 @@ ${adminStyles}
           <h2>用户</h2>
           <span class="muted" id="users-count"></span>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="users-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1716,6 +1781,7 @@ ${adminStyles}
           </table>
         </div>
         <p class="empty" id="users-empty" hidden>还没有用户，用下面的表单添加第一个。</p>
+        <p class="data-unavailable" id="users-unavailable" hidden>用户列表暂时不可用，请刷新后重试。刷新成功前不会对旧数据执行任何操作。</p>
       </section>
 
       <section class="card">
@@ -1781,7 +1847,7 @@ ${adminStyles}
           <h2>数据残留</h2>
           <span class="muted">已删除账号保留的同步数据</span>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="orphans-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1796,6 +1862,7 @@ ${adminStyles}
           </table>
         </div>
         <p class="empty" id="orphans-empty" hidden>没有保留的同步数据。</p>
+        <p class="data-unavailable" id="orphans-unavailable" hidden>残留数据暂时不可用，请刷新后重试。刷新成功前列表不展示，避免对可能过期的行执行恢复或彻底清理。</p>
       </section>
     </div>
 
