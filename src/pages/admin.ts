@@ -224,10 +224,10 @@ const adminScript = `
     // 'idle' (not requested yet), 'loading' (request in flight), 'ready' (mode
     // is known) and 'error' (no mode to show: the read failed, or the panel
     // load failed before the read could even be sent — enterPanel() settles
-    // that case instead of leaving the hint waiting on a request that will
-    // never happen). Only 'error' may claim a failure — a pending read used to
-    // borrow that copy, so a fresh login showed "读取失败" for the ~1.5s before
-    // /api/registration-info returned.
+    // that case, but only while the state is still 'idle', so a concurrent
+    // read's result is never overwritten). Only 'error' may claim a failure —
+    // a pending read used to borrow that copy, so a fresh login showed
+    // "读取失败" for the ~1.5s before /api/registration-info returned.
     modeStatus: 'idle',
     build: null
   }
@@ -1548,16 +1548,19 @@ const adminScript = `
       await loadUsers(epoch)
     } catch (err) {
       if (handleAuth(err)) return
-      // The mode read is sequenced behind the user list, so returning here
-      // means /api/registration-info was never sent. Left on the neutral copy,
+      // The mode read is sequenced behind the user list, so this failure may
+      // mean /api/registration-info was never sent: left on the neutral copy,
       // the settings hint would wait forever for a request that will not
-      // happen; the region takes the failure copy instead, which is the same
-      // conclusion (the mode is unknown) with the same remedy (刷新 re-runs
-      // loadMode()). No extra request is issued to get there.
-      // loadUsers() only rethrows inside the session that started it, so this
-      // never repaints a panel that a logout already reset.
-      state.modeStatus = 'error'
-      renderMode()
+      // happen. Collapse to the failure copy only while the mode state is still
+      // untouched — a 刷新 click during this very request starts loadMode()
+      // concurrently, and its 'loading' (and later 'ready', a mode that was
+      // really read) must not be overwritten here. 'idle' is exactly "no read
+      // in flight and none settled": loadMode() sets 'loading' before its
+      // first await, and resetData() puts the state back to 'idle' on logout.
+      if (state.modeStatus === 'idle') {
+        state.modeStatus = 'error'
+        renderMode()
+      }
       notice(messageFor(err), 'err')
       return
     }
