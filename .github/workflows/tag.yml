@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag name (e.g., v1.0.0). Must match the version in package.json (v + version)'
+        description: 'Tag name (e.g., v1.2.0). Must match the version in package.json (v + version)'
         required: true
         type: string
 
