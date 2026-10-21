@@ -141,12 +141,52 @@ tbody tr:last-child td { border-bottom: none; }
 .icon-btn { border: none; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .icon-btn:hover { background: var(--bg); color: var(--text); }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { margin-bottom: 0; display: flex; flex-direction: column; gap: 2px; }
+.kpi-label { color: var(--muted); font-size: 13px; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.25; }
+.todo-list { display: flex; flex-direction: column; gap: 8px; }
+.todo-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  border-radius: 8px; padding: 10px 12px;
+}
+.todo-item:hover { border-color: var(--muted); }
+.todo-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.todo-arrow { color: var(--muted); }
+.data-unavailable {
+  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
+  border-radius: 8px; color: var(--muted); background: var(--bg);
+}
+.todo-unknown {
+  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
+  border-radius: 8px; color: var(--muted);
+}
+.chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 8px; }
+.chart-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.chart-bar { width: 100%; background: var(--primary); border-radius: 2px 2px 0 0; }
+.chart-bar.zero { background: var(--line); min-height: 2px; }
+.chart-range { margin: 6px 0 0; font-size: 12px; }
+.build-line { margin: 0; font-size: 12px; text-align: center; }
+.about-hero { display: flex; flex-direction: column; gap: 4px; }
+.about-hero h2 { font-size: 18px; }
+.about-hash { display: inline-block; margin-top: 6px; font-size: 20px; font-weight: 700; }
+.about-list { margin: 0; }
+.about-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.about-row:last-child { border-bottom: none; }
+.about-row dt { color: var(--muted); }
+.about-row dd { margin: 0; word-break: break-all; }
+.about-row a { color: var(--primary); }
 @media (max-width: 640px) {
   .wrap { padding: 16px 12px 48px; }
   .card { padding: 14px; }
   .tabs { flex-wrap: wrap; }
   .actions-col { white-space: normal; }
   .row-actions { flex-wrap: wrap; }
+  .chart { height: 96px; }
+  .kpi-value { font-size: 22px; }
+  .about-row { grid-template-columns: 1fr; gap: 2px; }
 }
 `
 
@@ -158,9 +198,31 @@ const adminScript = `
   var STATUS_LABELS = { active: '正常', pending: '待批准', disabled: '已禁用' }
   var SOURCE_LABELS = { imported: '部署导入', self: '自助注册', admin: '管理员添加' }
   var MODE_LABELS = { closed: '关闭注册', open: '开放注册', approval: '需批准' }
-  var TABS = { users: '#users', settings: '#settings' }
+  var TAB_ORDER = ['home', 'users', 'settings', 'about']
+  var TABS = { home: '#home', users: '#users', settings: '#settings', about: '#about' }
+  var DEFAULT_TAB = 'home'
+  var ACTIVITY_DAYS = 30
+  var UNKNOWN = '—'
 
-  var state = { users: [], orphans: [], mode: 'approval', modeReady: false }
+  // Bumped by resetData(). Every request captures the epoch it started in and
+  // drops its result (success *or* failure) when the epoch moved on: after a
+  // logout or a 401, a response that arrives late must neither land in state
+  // nor repaint the DOM, otherwise the next login's first paint would show the
+  // previous session's rows again (the F5 leak, one request later).
+  var sessionEpoch = 0
+
+  var state = {
+    users: [],
+    orphans: [],
+    // Only true after the matching list request succeeded. Both the dashboard
+    // and the two tables render "unknown" instead of stale rows or a
+    // confident 0 when a list never arrived (or a refresh failed).
+    usersLoaded: false,
+    orphansLoaded: false,
+    mode: 'approval',
+    modeReady: false,
+    build: null
+  }
   var modalState = {
     onSubmit: null,
     onCanSubmit: null,
@@ -174,15 +236,38 @@ const adminScript = `
   }
 
   function tabFromHash() {
-    return location.hash === TABS.settings ? 'settings' : 'users'
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      if (TABS[TAB_ORDER[i]] === location.hash) return TAB_ORDER[i]
+    }
+    return DEFAULT_TAB
   }
 
   function activateTab(tab) {
-    var name = tab === 'settings' ? 'settings' : 'users'
-    $('tab-users').classList.toggle('active', name === 'users')
-    $('tab-settings').classList.toggle('active', name === 'settings')
-    $('tab-panel-users').hidden = name !== 'users'
-    $('tab-panel-settings').hidden = name !== 'settings'
+    var name = TABS[tab] ? tab : DEFAULT_TAB
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      var key = TAB_ORDER[i]
+      var tabButton = $('tab-' + key)
+      if (tabButton) tabButton.classList.toggle('active', key === name)
+      var panel = $('tab-panel-' + key)
+      if (panel) panel.hidden = key !== name
+    }
+  }
+
+  function goTab(name) {
+    var hash = TABS[name] || TABS[DEFAULT_TAB]
+    if (location.hash !== hash) location.hash = hash
+    activateTab(name)
+  }
+
+  // An unknown hash (or no hash at all) still shows the home tab, and the URL
+  // is rewritten to match what is on screen without adding a history entry.
+  function normalizeHash(tab) {
+    if (location.hash === TABS[tab]) return
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      if (TABS[TAB_ORDER[i]] === location.hash) return
+    }
+    if (history.replaceState) history.replaceState(null, '', TABS[tab])
+    else location.hash = TABS[tab]
   }
 
   function el(tag, className, text) {
@@ -334,8 +419,42 @@ const adminScript = `
 
   function handleAuth(err) {
     if (err.status !== 401) return false
-    showLogin('登录已过期，请重新登录')
+    endSession('登录已过期，请重新登录')
     return true
+  }
+
+  // Logout and session expiry must leave no trace of the previous session in
+  // the DOM. Clearing state alone is not enough: the tables and the dashboard
+  // would keep rendering the old rows (with their action buttons) until the
+  // next load returns, and a slow request would expose them to clicks.
+  function resetData() {
+    // Any request already in flight belongs to the session that just ended.
+    sessionEpoch++
+    state.users = []
+    state.orphans = []
+    state.usersLoaded = false
+    state.orphansLoaded = false
+    state.build = null
+    state.modeReady = false
+    // The registration mode is unknown until loadMode() returns: keeping the
+    // previous value would present a stale selection as fact, so the radios
+    // fall back to "nothing selected" and stay disabled (modeReady = false).
+    state.mode = ''
+    // These renderers already know the unknown state: they hide the table,
+    // show the unavailable note, disable the mode radios and drop the build
+    // footer / about values back to their fallbacks.
+    renderUsers()
+    renderOrphans()
+    renderMode()
+    renderBuildInfo()
+    renderAbout()
+  }
+
+  // Single exit path for "this session's data must not stay on screen", used
+  // by the logout button and by every 401 handler.
+  function endSession(message) {
+    resetData()
+    showLogin(message)
   }
 
   function showLogin(message) {
@@ -362,44 +481,100 @@ const adminScript = `
     $('panel-view').hidden = false
     $('tabs').hidden = false
     $('session-actions').hidden = false
-    activateTab(tabFromHash())
+    var tab = tabFromHash()
+    // Keep the URL and the visible panel in sync, including the first load
+    // without a hash: the home tab is the landing page.
+    normalizeHash(tab)
+    activateTab(tab)
   }
 
-  async function loadUsers() {
-    var data = await api('/api/admin/users')
-    state.users = data && Array.isArray(data.users) ? data.users : []
+  // The epoch argument is supplied by composite flows (refreshAll /
+  // enterPanel) that started earlier: if a logout happens in between, the
+  // whole chain becomes a no-op instead of repopulating a panel the user has
+  // already left.
+  async function loadUsers(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
+    var data
+    try {
+      data = await api('/api/admin/users')
+      if (!data || !Array.isArray(data.users)) throw new ApiError(502, data)
+    } catch (err) {
+      // Same policy as the orphan list: a failed refresh drops the table into
+      // its unavailable state instead of leaving rows with live action buttons
+      // that may act on stale data. A response from an ended session is
+      // dropped entirely.
+      if (epoch !== sessionEpoch) return
+      state.users = []
+      state.usersLoaded = false
+      renderUsers()
+      throw err
+    }
+    if (epoch !== sessionEpoch) return
+    state.users = data.users
+    state.usersLoaded = true
     renderUsers()
   }
 
-  async function loadOrphans() {
-    var data = await api('/api/admin/orphans')
-    state.orphans = Array.isArray(data) ? data : []
+  async function loadOrphans(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
+    var data
+    try {
+      data = await api('/api/admin/orphans')
+      if (!Array.isArray(data)) throw new ApiError(502, data)
+    } catch (err) {
+      // The list is unknown, not empty: drop back to the unknown state so the
+      // home KPI and the settings table never show stale data (or a 0) that a
+      // "彻底清理" click could act on.
+      if (epoch !== sessionEpoch) return
+      state.orphans = []
+      state.orphansLoaded = false
+      renderOrphans()
+      throw err
+    }
+    if (epoch !== sessionEpoch) return
+    state.orphans = data
+    state.orphansLoaded = true
     renderOrphans()
   }
 
-  async function loadMode() {
+  async function loadMode(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
     try {
       var data = await api('/api/registration-info')
+      if (epoch !== sessionEpoch) return
       state.mode = data && data.registrationMode ? data.registrationMode : 'approval'
       state.modeReady = true
     } catch (err) {
+      if (epoch !== sessionEpoch) return
       state.modeReady = false
     }
     renderMode()
   }
 
+  // The two lists are always refreshed together, so both are pinned to the
+  // epoch captured here rather than to whatever session is current by the time
+  // each request actually starts.
   async function refreshAll() {
-    await loadUsers()
-    await loadOrphans()
+    var epoch = sessionEpoch
+    await loadUsers(epoch)
+    await loadOrphans(epoch)
   }
 
   function renderUsers() {
     var body = $('users-body')
     clear(body)
-    $('users-count').textContent = state.users.length
+    var loaded = state.usersLoaded
+
+    $('users-table-wrap').hidden = !loaded
+    $('users-unavailable').hidden = loaded
+    $('users-count').textContent = loaded && state.users.length
       ? '共 ' + state.users.length + ' 个账号'
       : ''
-    $('users-empty').hidden = state.users.length > 0
+    $('users-empty').hidden = !loaded || state.users.length > 0
+    if (!loaded) {
+      renderHome()
+      return
+    }
 
     state.users.forEach(function (user) {
       var row = el('tr')
@@ -441,6 +616,8 @@ const adminScript = `
 
       body.appendChild(row)
     })
+
+    renderHome()
   }
 
   function addUserActions(group, user) {
@@ -554,7 +731,15 @@ const adminScript = `
   function renderOrphans() {
     var body = $('orphans-body')
     clear(body)
-    $('orphans-empty').hidden = state.orphans.length > 0
+    var loaded = state.orphansLoaded
+
+    $('orphans-table-wrap').hidden = !loaded
+    $('orphans-unavailable').hidden = loaded
+    $('orphans-empty').hidden = !loaded || state.orphans.length > 0
+    if (!loaded) {
+      renderHome()
+      return
+    }
 
     state.orphans.forEach(function (orphan) {
       var row = el('tr')
@@ -583,6 +768,8 @@ const adminScript = `
 
       body.appendChild(row)
     })
+
+    renderHome()
   }
 
   function renderMode() {
@@ -594,6 +781,276 @@ const adminScript = `
     $('mode-hint').textContent = state.modeReady
       ? '注册页地址：/register；切换后立即生效。'
       : '注册模式读取失败，请刷新页面重试。'
+  }
+
+  // --- Home dashboard -------------------------------------------------------
+  // Everything below is derived from state (users/orphans), which the panel
+  // already loads on login and on every refreshAll; the dashboard never issues
+  // its own data requests. Only the build footer reads the build-info endpoint.
+
+  function deviceTotal() {
+    var total = 0
+    for (var i = 0; i < state.users.length; i++) {
+      var count = state.users[i].deviceCount
+      if (typeof count === 'number' && isFinite(count)) total += count
+    }
+    return total
+  }
+
+  function pendingTotal() {
+    var total = 0
+    for (var i = 0; i < state.users.length; i++) {
+      if (state.users[i].status === 'pending') total++
+    }
+    return total
+  }
+
+  function timestampOf(value) {
+    if (!value) return 0
+    var time = new Date(value).getTime()
+    return isNaN(time) ? 0 : time
+  }
+
+  function renderHome() {
+    var pending = pendingTotal()
+    var usersLoaded = state.usersLoaded
+    $('kpi-users').textContent = usersLoaded
+      ? String(state.users.length)
+      : UNKNOWN
+    $('kpi-devices').textContent = usersLoaded ? String(deviceTotal()) : UNKNOWN
+    $('kpi-pending').textContent = usersLoaded ? String(pending) : UNKNOWN
+    $('kpi-orphans').textContent = state.orphansLoaded
+      ? String(state.orphans.length)
+      : UNKNOWN
+    renderTodo(pending)
+    renderRecent()
+    renderActivity()
+  }
+
+  function renderTodo(pending) {
+    var list = $('todo-list')
+    clear(list)
+
+    if (state.usersLoaded) {
+      if (pending > 0) {
+        list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
+      }
+    } else {
+      list.appendChild(
+        el('p', 'todo-unknown', '注册待审批：—（暂时无法获取，请刷新后重试）')
+      )
+    }
+
+    if (state.orphansLoaded) {
+      if (state.orphans.length > 0) {
+        list.appendChild(
+          todoItem(state.orphans.length + ' 条数据残留待处理', 'settings')
+        )
+      }
+    } else {
+      // Unknown, so neither a count nor "暂无待处理事项" is honest here.
+      list.appendChild(
+        el('p', 'todo-unknown', '数据残留待处理：—（暂时无法获取，请刷新后重试）')
+      )
+    }
+
+    if (list.childNodes.length === 0) {
+      list.appendChild(el('p', 'empty', '暂无待处理事项'))
+    }
+  }
+
+  function todoItem(text, tab) {
+    var node = el('button', 'todo-item', text)
+    node.type = 'button'
+    node.appendChild(el('span', 'todo-arrow', '→'))
+    node.addEventListener('click', function () {
+      goTab(tab)
+    })
+    return node
+  }
+
+  function renderRecent() {
+    var body = $('recent-body')
+    clear(body)
+    var empty = $('recent-empty')
+
+    if (!state.usersLoaded) {
+      empty.textContent = '用户列表暂时无法获取，请刷新后重试。'
+      empty.hidden = false
+      return
+    }
+
+    empty.textContent = '还没有注册记录。'
+    var rows = state.users.slice()
+    rows.sort(function (a, b) {
+      return timestampOf(b.createdAt) - timestampOf(a.createdAt)
+    })
+    rows = rows.slice(0, 5)
+    empty.hidden = rows.length > 0
+
+    rows.forEach(function (user) {
+      var row = el('tr')
+      row.appendChild(el('td', 'name-cell', user.name))
+      var statusCell = el('td')
+      statusCell.appendChild(
+        el(
+          'span',
+          'badge ' + statusClass(user.status),
+          labelFrom(STATUS_LABELS, user.status)
+        )
+      )
+      row.appendChild(statusCell)
+      row.appendChild(el('td', 'muted', formatTime(user.createdAt)))
+      body.appendChild(row)
+    })
+  }
+
+  function dayKey(date) {
+    var month = date.getMonth() + 1
+    var day = date.getDate()
+    return (
+      date.getFullYear() +
+      '-' +
+      (month < 10 ? '0' + month : String(month)) +
+      '-' +
+      (day < 10 ? '0' + day : String(day))
+    )
+  }
+
+  function activitySeries() {
+    var today = new Date()
+    today.setHours(0, 0, 0, 0)
+    var days = []
+    var counts = {}
+    for (var i = ACTIVITY_DAYS - 1; i >= 0; i--) {
+      var date = new Date(today.getTime())
+      date.setDate(today.getDate() - i)
+      var key = dayKey(date)
+      counts[key] = 0
+      days.push({ key: key, count: 0 })
+    }
+
+    state.users.forEach(function (user) {
+      if (!user.createdAt) return
+      var created = new Date(user.createdAt)
+      if (isNaN(created.getTime())) return
+      var key = dayKey(created)
+      if (counts[key] === undefined) return
+      counts[key]++
+    })
+
+    var total = 0
+    days.forEach(function (entry) {
+      entry.count = counts[entry.key]
+      total += entry.count
+    })
+    return { days: days, total: total }
+  }
+
+  function renderActivity() {
+    var bars = $('chart-bars')
+    clear(bars)
+
+    if (!state.usersLoaded) {
+      // An all-zero chart would read as "no signups", so hide it and say why.
+      bars.hidden = true
+      $('chart-total').textContent = '近 30 天新增：—'
+      $('chart-range').textContent = '用户列表暂时无法获取，请刷新后重试。'
+      return
+    }
+
+    bars.hidden = false
+    var series = activitySeries()
+
+    var peak = 0
+    series.days.forEach(function (entry) {
+      if (entry.count > peak) peak = entry.count
+    })
+
+    series.days.forEach(function (entry) {
+      var column = el('div', 'chart-col')
+      var bar = el('div', entry.count === 0 ? 'chart-bar zero' : 'chart-bar')
+      bar.style.height = (peak === 0 ? 0 : Math.round((entry.count / peak) * 100)) + '%'
+      column.title = entry.key + ' · ' + entry.count + ' 人'
+      column.appendChild(bar)
+      bars.appendChild(column)
+    })
+
+    $('chart-total').textContent =
+      series.total === 0 ? '近 30 天暂无新增' : '近 30 天新增 ' + series.total + ' 人'
+    $('chart-range').textContent =
+      series.days[0].key + ' — ' + series.days[series.days.length - 1].key
+  }
+
+  // --- Build info ---------------------------------------------------------
+  // GET /api/admin/build-info is the only extra request the dashboard makes.
+  // A failure (or an un-injected dev build) leaves the footer hidden and the
+  // about page on its fallback values; nothing here ever renders undefined.
+
+  function buildVersion() {
+    var version = state.build && state.build.version
+    return typeof version === 'string' && version ? version : 'dev'
+  }
+
+  function buildCommit() {
+    var commit = state.build && state.build.commit
+    return typeof commit === 'string' && commit ? commit : 'dev'
+  }
+
+  function buildBuiltAt() {
+    var builtAt = state.build && state.build.builtAt
+    return typeof builtAt === 'string' && builtAt ? builtAt : null
+  }
+
+  function isDevBuild() {
+    var commit = state.build && state.build.commit
+    return typeof commit !== 'string' || commit === '' || commit === 'dev'
+  }
+
+  function shortCommit(commit) {
+    return commit.length > 7 ? commit.slice(0, 7) : commit
+  }
+
+  function versionText() {
+    var version = buildVersion()
+    return version === 'dev' ? 'dev' : 'v' + version
+  }
+
+  async function loadBuildInfo(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
+    try {
+      var data = await api('/api/admin/build-info')
+      if (epoch !== sessionEpoch) return
+      state.build = data && typeof data === 'object' ? data : null
+    } catch (err) {
+      if (epoch !== sessionEpoch) return
+      // Build metadata itself is cosmetic, but the request is authenticated: a
+      // 401 here means the session expired, so it takes the same exit as every
+      // other authenticated call instead of being swallowed as "no footer".
+      if (handleAuth(err)) return
+      state.build = null
+    }
+    renderBuildInfo()
+    renderAbout()
+  }
+
+  function renderBuildInfo() {
+    var line = $('build-line')
+    if (isDevBuild()) {
+      line.textContent = ''
+      line.hidden = true
+      return
+    }
+    line.textContent = versionText() + ' · ' + shortCommit(buildCommit())
+    line.hidden = false
+  }
+
+  function renderAbout() {
+    var commit = buildCommit()
+    $('about-version').textContent = versionText()
+    $('about-commit').textContent = commit
+    $('about-commit-short').textContent = shortCommit(commit)
+    $('about-built').textContent = buildBuiltAt() ? formatTime(buildBuiltAt()) : '—'
   }
 
   function openModal(options) {
@@ -673,10 +1130,13 @@ const adminScript = `
       modalState.busy = false
       if (closeOnSuccess) closeModal()
     } catch (err) {
+      // A 401 is a session expiry, not a field error: the modals below rethrow
+      // it so this branch closes the dialog and resets the panel, instead of
+      // painting "登录已过期" inside a dialog that is still on screen.
       if (err.status === 401) {
         modalState.busy = false
         closeModal()
-        showLogin('登录已过期，请重新登录')
+        endSession('登录已过期，请重新登录')
         return
       }
       errorNode.textContent = messageFor(err)
@@ -702,6 +1162,7 @@ const adminScript = `
             method: 'POST'
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 409) return '该账号状态已变化，请刷新后重试'
           return messageFor(err)
         }
@@ -751,6 +1212,7 @@ const adminScript = `
             }
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 400) return '配置不符合要求'
           return messageFor(err)
         }
@@ -797,6 +1259,7 @@ const adminScript = `
             }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 502 && err.data && err.data.passwordChanged) {
             return '密码已修改，但设备解绑失败；请稍后重试，或在设备列表中手动删除设备。'
           }
@@ -831,6 +1294,7 @@ const adminScript = `
             method: 'DELETE'
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 502 && err.data && err.data.orphaned) {
             notice(
               '账号已删除、同步数据保留，但设备解绑失败，请在设备列表中手动清理',
@@ -869,6 +1333,7 @@ const adminScript = `
             }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 409) return '该用户名已被占用，无法恢复'
           if (err.status === 404) return '该数据残留已不存在'
           if (err.status === 400) return '密码需为 8–128 位'
@@ -909,6 +1374,7 @@ const adminScript = `
             body: { confirmName: input.value }
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 400) return '确认用户名不一致'
           if (err.status === 404) return '该数据残留已不存在'
           if (err.status === 502) return '同步数据清理失败，墓碑已保留，请稍后重试'
@@ -937,16 +1403,19 @@ const adminScript = `
   }
 
   async function loadDeviceList(name, container) {
+    var epoch = sessionEpoch
     clear(container)
     container.appendChild(el('p', 'muted', '正在读取设备…'))
     var devices
     try {
       devices = await api('/api/admin/users/' + encodeURIComponent(name) + '/devices')
     } catch (err) {
+      if (epoch !== sessionEpoch) return
       if (err.status === 401) {
+        // The dialog belongs to the expired session: close it, then take the
+        // same reset exit as every other 401.
         closeModal()
-        showLogin('登录已过期，请重新登录')
-        return
+        if (handleAuth(err)) return
       }
       clear(container)
       container.appendChild(
@@ -959,6 +1428,7 @@ const adminScript = `
       return
     }
 
+    if (epoch !== sessionEpoch) return
     clear(container)
     if (!Array.isArray(devices) || devices.length === 0) {
       container.appendChild(el('p', 'muted', '该用户还没有配对设备。'))
@@ -1026,6 +1496,7 @@ const adminScript = `
             { method: 'DELETE' }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 404) return '设备已不存在'
           if (err.status === 502) return '该用户的同步数据暂时不可用'
           return messageFor(err)
@@ -1038,17 +1509,30 @@ const adminScript = `
     })
   }
 
+  function bindTab(name) {
+    var node = $('tab-' + name)
+    if (!node) return
+    node.addEventListener('click', function () {
+      goTab(name)
+    })
+  }
+
   async function enterPanel() {
+    // Pin the whole login sequence to one session: if the user logs out while
+    // the first list is still loading, the remaining loads must not run (and
+    // must not repopulate the panel behind the login form).
+    var epoch = sessionEpoch
     showPanel()
     try {
-      await loadUsers()
+      await loadUsers(epoch)
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
       return
     }
+    if (epoch !== sessionEpoch) return
     try {
-      await Promise.all([loadOrphans(), loadMode()])
+      await Promise.all([loadOrphans(epoch), loadMode(epoch), loadBuildInfo(epoch)])
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
@@ -1113,10 +1597,8 @@ const adminScript = `
         node.disabled = false
       }
       if (!loggedOut) return
-      state.users = []
-      state.orphans = []
       notice('已退出登录', 'ok')
-      showLogin('')
+      endSession('')
     })
 
     $('add-form').addEventListener('submit', async function (event) {
@@ -1201,18 +1683,14 @@ const adminScript = `
       })
     }
 
-    $('tab-users').addEventListener('click', function () {
-      activateTab('users')
-      location.hash = TABS.users
-    })
-
-    $('tab-settings').addEventListener('click', function () {
-      activateTab('settings')
-      location.hash = TABS.settings
-    })
+    for (var t = 0; t < TAB_ORDER.length; t++) {
+      bindTab(TAB_ORDER[t])
+    }
 
     window.addEventListener('hashchange', function () {
-      activateTab(tabFromHash())
+      var tab = tabFromHash()
+      normalizeHash(tab)
+      activateTab(tab)
     })
 
     $('modal-close').addEventListener('click', closeModal)
@@ -1229,14 +1707,14 @@ const adminScript = `
       await loadUsers()
     } catch (err) {
       $('boot').hidden = true
-      if (err.status === 401) showLogin('')
+      if (err.status === 401) endSession('')
       else showLogin(messageFor(err))
       return
     }
     $('boot').hidden = true
     showPanel()
     try {
-      await Promise.all([loadOrphans(), loadMode()])
+      await Promise.all([loadOrphans(), loadMode(), loadBuildInfo()])
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
@@ -1293,9 +1771,71 @@ ${adminStyles}
 
   <div id="panel-view" hidden>
     <nav class="tabs" id="tabs" hidden>
+      <button class="tab" id="tab-home" type="button">首页</button>
       <button class="tab" id="tab-users" type="button">用户管理</button>
       <button class="tab" id="tab-settings" type="button">系统设置</button>
+      <button class="tab" id="tab-about" type="button">关于</button>
     </nav>
+
+    <div id="tab-panel-home" hidden>
+      <section class="kpi-grid">
+        <div class="card kpi">
+          <span class="kpi-label">用户总数</span>
+          <strong class="kpi-value" id="kpi-users">—</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">设备总数</span>
+          <strong class="kpi-value" id="kpi-devices">—</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">待审批</span>
+          <strong class="kpi-value" id="kpi-pending">—</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">数据残留</span>
+          <strong class="kpi-value" id="kpi-orphans">—</strong>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>待处理</h2>
+          <span class="muted">点击条目跳转对应页签</span>
+        </div>
+        <div class="todo-list" id="todo-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>最近注册</h2>
+          <span class="muted">按创建时间倒序，最多 5 人</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>状态</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="recent-body"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="recent-empty" hidden>还没有注册记录。</p>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>近 30 天新增</h2>
+          <span class="muted" id="chart-total">近 30 天暂无新增</span>
+        </div>
+        <div class="chart" id="chart-bars"></div>
+        <p class="muted chart-range" id="chart-range"></p>
+      </section>
+
+      <p class="muted build-line" id="build-line" hidden></p>
+    </div>
 
     <div id="tab-panel-users">
       <section class="card">
@@ -1303,7 +1843,7 @@ ${adminStyles}
           <h2>用户</h2>
           <span class="muted" id="users-count"></span>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="users-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1320,6 +1860,7 @@ ${adminStyles}
           </table>
         </div>
         <p class="empty" id="users-empty" hidden>还没有用户，用下面的表单添加第一个。</p>
+        <p class="data-unavailable" id="users-unavailable" hidden>用户列表暂时不可用，请刷新后重试。刷新成功前不会对旧数据执行任何操作。</p>
       </section>
 
       <section class="card">
@@ -1385,7 +1926,7 @@ ${adminStyles}
           <h2>数据残留</h2>
           <span class="muted">已删除账号保留的同步数据</span>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="orphans-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1400,6 +1941,46 @@ ${adminStyles}
           </table>
         </div>
         <p class="empty" id="orphans-empty" hidden>没有保留的同步数据。</p>
+        <p class="data-unavailable" id="orphans-unavailable" hidden>残留数据暂时不可用，请刷新后重试。刷新成功前列表不展示，避免对可能过期的行执行恢复或彻底清理。</p>
+      </section>
+    </div>
+
+    <div id="tab-panel-about" hidden>
+      <section class="card about-hero">
+        <h2>LX Music 管理面板</h2>
+        <p class="muted">LX Music 同步服务的管理后台</p>
+        <code class="about-hash" id="about-commit-short">dev</code>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>构建信息</h2>
+          <span class="muted">由部署流程注入</span>
+        </div>
+        <dl class="about-list">
+          <div class="about-row">
+            <dt>产品名称</dt>
+            <dd>LX Music 管理面板</dd>
+          </div>
+          <div class="about-row">
+            <dt>版本号</dt>
+            <dd id="about-version">dev</dd>
+          </div>
+          <div class="about-row">
+            <dt>构建哈希</dt>
+            <dd><code id="about-commit">dev</code></dd>
+          </div>
+          <div class="about-row">
+            <dt>构建时间</dt>
+            <dd id="about-built">—</dd>
+          </div>
+          <div class="about-row">
+            <dt>源码仓库</dt>
+            <dd>
+              <a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
+            </dd>
+          </div>
+        </dl>
       </section>
     </div>
   </div>
