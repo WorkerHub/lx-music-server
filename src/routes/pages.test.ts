@@ -91,4 +91,89 @@ describe('page markup safety', () => {
       settingsPanel.indexOf('数据残留'),
     )
   })
+
+  it('expands the admin panel to four tabs in a fixed order', () => {
+    const tabs: Array<[string, string, string]> = [
+      ['home', '首页', "'#home'"],
+      ['users', '用户管理', "'#users'"],
+      ['settings', '系统设置', "'#settings'"],
+      ['about', '关于', "'#about'"],
+    ]
+
+    const positions = tabs.map(([name, label, hash]) => {
+      expect(adminPageHtml).toContain(`id="tab-${name}"`)
+      expect(adminPageHtml).toContain(`id="tab-panel-${name}"`)
+      expect(adminPageHtml).toContain(hash)
+      expect(adminPageHtml).toContain(label)
+      return adminPageHtml.indexOf(`id="tab-${name}"`)
+    })
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  })
+
+  it('lands on the home tab by default and falls back to it', () => {
+    expect(adminPageHtml).toContain("var DEFAULT_TAB = 'home'")
+    expect(adminPageHtml).toContain("home: '#home'")
+    expect(adminPageHtml.indexOf('id="tab-panel-home"')).toBeLessThan(
+      adminPageHtml.indexOf('id="tab-panel-users"'),
+    )
+
+    const tabFromHash = adminPageHtml.slice(
+      adminPageHtml.indexOf('function tabFromHash'),
+      adminPageHtml.indexOf('function activateTab'),
+    )
+    expect(tabFromHash).toContain('return DEFAULT_TAB')
+    expect(tabFromHash).not.toContain('users')
+  })
+
+  it('renders the home dashboard containers', () => {
+    const containers = [
+      'kpi-users',
+      'kpi-devices',
+      'kpi-pending',
+      'kpi-orphans',
+      'todo-list',
+      'recent-body',
+      'recent-empty',
+      'chart-bars',
+      'chart-total',
+      'build-line',
+    ]
+    for (const id of containers) {
+      expect(adminPageHtml).toContain(`id="${id}"`)
+    }
+
+    expect(adminPageHtml).toContain('用户总数')
+    expect(adminPageHtml).toContain('设备总数')
+    expect(adminPageHtml).toContain('待审批')
+    expect(adminPageHtml).toContain('数据残留')
+    expect(adminPageHtml).toContain('最近注册')
+    expect(adminPageHtml).toContain('近 30 天新增')
+    expect(adminPageHtml).toContain('暂无待处理事项')
+    expect(adminPageHtml).toContain("'/api/admin/build-info'")
+  })
+
+  it('renders the about page build fields and repository link', () => {
+    expect(adminPageHtml).toContain('id="tab-panel-about"')
+
+    const fields = [
+      'about-version',
+      'about-commit',
+      'about-commit-short',
+      'about-built',
+      'about-repo',
+    ]
+    for (const id of fields) {
+      expect(adminPageHtml).toContain(`id="${id}"`)
+    }
+
+    expect(adminPageHtml).toContain('版本号')
+    expect(adminPageHtml).toContain('构建哈希')
+    expect(adminPageHtml).toContain('构建时间')
+    expect(adminPageHtml).toContain(
+      'https://github.com/WorkerHub/lx-music-server',
+    )
+    // dev builds must fall back to 'dev' / '—' instead of undefined or null.
+    expect(adminPageHtml).toContain("commit === 'dev'")
+    expect(adminPageHtml).toContain("'—'")
+  })
 })

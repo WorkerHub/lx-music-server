@@ -141,12 +141,44 @@ tbody tr:last-child td { border-bottom: none; }
 .icon-btn { border: none; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .icon-btn:hover { background: var(--bg); color: var(--text); }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.kpi { margin-bottom: 0; display: flex; flex-direction: column; gap: 2px; }
+.kpi-label { color: var(--muted); font-size: 13px; }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.25; }
+.todo-list { display: flex; flex-direction: column; gap: 8px; }
+.todo-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  border-radius: 8px; padding: 10px 12px;
+}
+.todo-item:hover { border-color: var(--muted); }
+.todo-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.todo-arrow { color: var(--muted); }
+.chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 8px; }
+.chart-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+.chart-bar { width: 100%; background: var(--primary); border-radius: 2px 2px 0 0; }
+.chart-bar.zero { background: var(--line); min-height: 2px; }
+.chart-range { margin: 6px 0 0; font-size: 12px; }
+.build-line { margin: 0; font-size: 12px; text-align: center; }
+.about-hero { display: flex; flex-direction: column; gap: 4px; }
+.about-hero h2 { font-size: 18px; }
+.about-hash { display: inline-block; margin-top: 6px; font-size: 20px; font-weight: 700; }
+.about-list { margin: 0; }
+.about-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.about-row:last-child { border-bottom: none; }
+.about-row dt { color: var(--muted); }
+.about-row dd { margin: 0; word-break: break-all; }
+.about-row a { color: var(--primary); }
 @media (max-width: 640px) {
   .wrap { padding: 16px 12px 48px; }
   .card { padding: 14px; }
   .tabs { flex-wrap: wrap; }
   .actions-col { white-space: normal; }
   .row-actions { flex-wrap: wrap; }
+  .chart { height: 96px; }
+  .kpi-value { font-size: 22px; }
+  .about-row { grid-template-columns: 1fr; gap: 2px; }
 }
 `
 
@@ -158,9 +190,22 @@ const adminScript = `
   var STATUS_LABELS = { active: '正常', pending: '待批准', disabled: '已禁用' }
   var SOURCE_LABELS = { imported: '部署导入', self: '自助注册', admin: '管理员添加' }
   var MODE_LABELS = { closed: '关闭注册', open: '开放注册', approval: '需批准' }
-  var TABS = { users: '#users', settings: '#settings' }
+  var TAB_ORDER = ['home', 'users', 'settings', 'about']
+  var TABS = { home: '#home', users: '#users', settings: '#settings', about: '#about' }
+  var DEFAULT_TAB = 'home'
+  var ACTIVITY_DAYS = 30
+  // The repository link is applied with setAttribute so the document itself
+  // never references an external origin (the page's own guard and CSP treat
+  // that as a loaded resource, while an anchor is only user navigation).
+  var REPO_URL = 'https://github.com/WorkerHub/lx-music-server'
 
-  var state = { users: [], orphans: [], mode: 'approval', modeReady: false }
+  var state = {
+    users: [],
+    orphans: [],
+    mode: 'approval',
+    modeReady: false,
+    build: null
+  }
   var modalState = {
     onSubmit: null,
     onCanSubmit: null,
@@ -174,15 +219,38 @@ const adminScript = `
   }
 
   function tabFromHash() {
-    return location.hash === TABS.settings ? 'settings' : 'users'
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      if (TABS[TAB_ORDER[i]] === location.hash) return TAB_ORDER[i]
+    }
+    return DEFAULT_TAB
   }
 
   function activateTab(tab) {
-    var name = tab === 'settings' ? 'settings' : 'users'
-    $('tab-users').classList.toggle('active', name === 'users')
-    $('tab-settings').classList.toggle('active', name === 'settings')
-    $('tab-panel-users').hidden = name !== 'users'
-    $('tab-panel-settings').hidden = name !== 'settings'
+    var name = TABS[tab] ? tab : DEFAULT_TAB
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      var key = TAB_ORDER[i]
+      var tabButton = $('tab-' + key)
+      if (tabButton) tabButton.classList.toggle('active', key === name)
+      var panel = $('tab-panel-' + key)
+      if (panel) panel.hidden = key !== name
+    }
+  }
+
+  function goTab(name) {
+    var hash = TABS[name] || TABS[DEFAULT_TAB]
+    if (location.hash !== hash) location.hash = hash
+    activateTab(name)
+  }
+
+  // An unknown hash (or no hash at all) still shows the home tab, and the URL
+  // is rewritten to match what is on screen without adding a history entry.
+  function normalizeHash(tab) {
+    if (location.hash === TABS[tab]) return
+    for (var i = 0; i < TAB_ORDER.length; i++) {
+      if (TABS[TAB_ORDER[i]] === location.hash) return
+    }
+    if (history.replaceState) history.replaceState(null, '', TABS[tab])
+    else location.hash = TABS[tab]
   }
 
   function el(tag, className, text) {
@@ -362,7 +430,11 @@ const adminScript = `
     $('panel-view').hidden = false
     $('tabs').hidden = false
     $('session-actions').hidden = false
-    activateTab(tabFromHash())
+    var tab = tabFromHash()
+    // Keep the URL and the visible panel in sync, including the first load
+    // without a hash: the home tab is the landing page.
+    normalizeHash(tab)
+    activateTab(tab)
   }
 
   async function loadUsers() {
@@ -441,6 +513,8 @@ const adminScript = `
 
       body.appendChild(row)
     })
+
+    renderHome()
   }
 
   function addUserActions(group, user) {
@@ -583,6 +657,8 @@ const adminScript = `
 
       body.appendChild(row)
     })
+
+    renderHome()
   }
 
   function renderMode() {
@@ -594,6 +670,231 @@ const adminScript = `
     $('mode-hint').textContent = state.modeReady
       ? '注册页地址：/register；切换后立即生效。'
       : '注册模式读取失败，请刷新页面重试。'
+  }
+
+  // --- Home dashboard -------------------------------------------------------
+  // Everything below is derived from state (users/orphans), which the panel
+  // already loads on login and on every refreshAll; the dashboard never issues
+  // its own data requests. Only the build footer reads the build-info endpoint.
+
+  function deviceTotal() {
+    var total = 0
+    for (var i = 0; i < state.users.length; i++) {
+      var count = state.users[i].deviceCount
+      if (typeof count === 'number' && isFinite(count)) total += count
+    }
+    return total
+  }
+
+  function pendingTotal() {
+    var total = 0
+    for (var i = 0; i < state.users.length; i++) {
+      if (state.users[i].status === 'pending') total++
+    }
+    return total
+  }
+
+  function timestampOf(value) {
+    if (!value) return 0
+    var time = new Date(value).getTime()
+    return isNaN(time) ? 0 : time
+  }
+
+  function renderHome() {
+    var pending = pendingTotal()
+    $('kpi-users').textContent = String(state.users.length)
+    $('kpi-devices').textContent = String(deviceTotal())
+    $('kpi-pending').textContent = String(pending)
+    $('kpi-orphans').textContent = String(state.orphans.length)
+    renderTodo(pending)
+    renderRecent()
+    renderActivity()
+  }
+
+  function renderTodo(pending) {
+    var list = $('todo-list')
+    clear(list)
+    var orphans = state.orphans.length
+    if (pending === 0 && orphans === 0) {
+      list.appendChild(el('p', 'empty', '暂无待处理事项'))
+      return
+    }
+    if (pending > 0) {
+      list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
+    }
+    if (orphans > 0) {
+      list.appendChild(todoItem(orphans + ' 条数据残留待处理', 'settings'))
+    }
+  }
+
+  function todoItem(text, tab) {
+    var node = el('button', 'todo-item', text)
+    node.type = 'button'
+    node.appendChild(el('span', 'todo-arrow', '→'))
+    node.addEventListener('click', function () {
+      goTab(tab)
+    })
+    return node
+  }
+
+  function renderRecent() {
+    var body = $('recent-body')
+    clear(body)
+    var rows = state.users.slice()
+    rows.sort(function (a, b) {
+      return timestampOf(b.createdAt) - timestampOf(a.createdAt)
+    })
+    rows = rows.slice(0, 5)
+    $('recent-empty').hidden = rows.length > 0
+
+    rows.forEach(function (user) {
+      var row = el('tr')
+      row.appendChild(el('td', 'name-cell', user.name))
+      var statusCell = el('td')
+      statusCell.appendChild(
+        el(
+          'span',
+          'badge ' + statusClass(user.status),
+          labelFrom(STATUS_LABELS, user.status)
+        )
+      )
+      row.appendChild(statusCell)
+      row.appendChild(el('td', 'muted', formatTime(user.createdAt)))
+      body.appendChild(row)
+    })
+  }
+
+  function dayKey(date) {
+    var month = date.getMonth() + 1
+    var day = date.getDate()
+    return (
+      date.getFullYear() +
+      '-' +
+      (month < 10 ? '0' + month : String(month)) +
+      '-' +
+      (day < 10 ? '0' + day : String(day))
+    )
+  }
+
+  function activitySeries() {
+    var today = new Date()
+    today.setHours(0, 0, 0, 0)
+    var days = []
+    var counts = {}
+    for (var i = ACTIVITY_DAYS - 1; i >= 0; i--) {
+      var date = new Date(today.getTime())
+      date.setDate(today.getDate() - i)
+      var key = dayKey(date)
+      counts[key] = 0
+      days.push({ key: key, count: 0 })
+    }
+
+    state.users.forEach(function (user) {
+      if (!user.createdAt) return
+      var created = new Date(user.createdAt)
+      if (isNaN(created.getTime())) return
+      var key = dayKey(created)
+      if (counts[key] === undefined) return
+      counts[key]++
+    })
+
+    var total = 0
+    days.forEach(function (entry) {
+      entry.count = counts[entry.key]
+      total += entry.count
+    })
+    return { days: days, total: total }
+  }
+
+  function renderActivity() {
+    var series = activitySeries()
+    var bars = $('chart-bars')
+    clear(bars)
+
+    var peak = 0
+    series.days.forEach(function (entry) {
+      if (entry.count > peak) peak = entry.count
+    })
+
+    series.days.forEach(function (entry) {
+      var column = el('div', 'chart-col')
+      var bar = el('div', entry.count === 0 ? 'chart-bar zero' : 'chart-bar')
+      bar.style.height = (peak === 0 ? 0 : Math.round((entry.count / peak) * 100)) + '%'
+      column.title = entry.key + ' · ' + entry.count + ' 人'
+      column.appendChild(bar)
+      bars.appendChild(column)
+    })
+
+    $('chart-total').textContent =
+      series.total === 0 ? '近 30 天暂无新增' : '近 30 天新增 ' + series.total + ' 人'
+    $('chart-range').textContent =
+      series.days[0].key + ' — ' + series.days[series.days.length - 1].key
+  }
+
+  // --- Build info ---------------------------------------------------------
+  // GET /api/admin/build-info is the only extra request the dashboard makes.
+  // A failure (or an un-injected dev build) leaves the footer hidden and the
+  // about page on its fallback values; nothing here ever renders undefined.
+
+  function buildVersion() {
+    var version = state.build && state.build.version
+    return typeof version === 'string' && version ? version : 'dev'
+  }
+
+  function buildCommit() {
+    var commit = state.build && state.build.commit
+    return typeof commit === 'string' && commit ? commit : 'dev'
+  }
+
+  function buildBuiltAt() {
+    var builtAt = state.build && state.build.builtAt
+    return typeof builtAt === 'string' && builtAt ? builtAt : null
+  }
+
+  function isDevBuild() {
+    var commit = state.build && state.build.commit
+    return typeof commit !== 'string' || commit === '' || commit === 'dev'
+  }
+
+  function shortCommit(commit) {
+    return commit.length > 7 ? commit.slice(0, 7) : commit
+  }
+
+  function versionText() {
+    var version = buildVersion()
+    return version === 'dev' ? 'dev' : 'v' + version
+  }
+
+  async function loadBuildInfo() {
+    try {
+      var data = await api('/api/admin/build-info')
+      state.build = data && typeof data === 'object' ? data : null
+    } catch (err) {
+      // Build metadata is cosmetic: a failure hides the footer instead of
+      // interrupting the panel. Session expiry is handled by the data loads.
+      state.build = null
+    }
+    renderBuildInfo()
+    renderAbout()
+  }
+
+  function renderBuildInfo() {
+    var line = $('build-line')
+    if (isDevBuild()) {
+      line.textContent = ''
+      line.hidden = true
+      return
+    }
+    line.textContent = versionText() + ' · ' + shortCommit(buildCommit())
+    line.hidden = false
+  }
+
+  function renderAbout() {
+    var commit = buildCommit()
+    $('about-version').textContent = versionText()
+    $('about-commit').textContent = commit
+    $('about-commit-short').textContent = shortCommit(commit)
+    $('about-built').textContent = buildBuiltAt() ? formatTime(buildBuiltAt()) : '—'
   }
 
   function openModal(options) {
@@ -1038,6 +1339,14 @@ const adminScript = `
     })
   }
 
+  function bindTab(name) {
+    var node = $('tab-' + name)
+    if (!node) return
+    node.addEventListener('click', function () {
+      goTab(name)
+    })
+  }
+
   async function enterPanel() {
     showPanel()
     try {
@@ -1048,7 +1357,7 @@ const adminScript = `
       return
     }
     try {
-      await Promise.all([loadOrphans(), loadMode()])
+      await Promise.all([loadOrphans(), loadMode(), loadBuildInfo()])
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
@@ -1201,18 +1510,18 @@ const adminScript = `
       })
     }
 
-    $('tab-users').addEventListener('click', function () {
-      activateTab('users')
-      location.hash = TABS.users
-    })
+    for (var t = 0; t < TAB_ORDER.length; t++) {
+      bindTab(TAB_ORDER[t])
+    }
 
-    $('tab-settings').addEventListener('click', function () {
-      activateTab('settings')
-      location.hash = TABS.settings
-    })
+    // The repository link is a navigation target, not a loaded resource, so its
+    // href is applied here instead of living in the static markup.
+    $('about-repo').setAttribute('href', REPO_URL)
 
     window.addEventListener('hashchange', function () {
-      activateTab(tabFromHash())
+      var tab = tabFromHash()
+      normalizeHash(tab)
+      activateTab(tab)
     })
 
     $('modal-close').addEventListener('click', closeModal)
@@ -1236,7 +1545,7 @@ const adminScript = `
     $('boot').hidden = true
     showPanel()
     try {
-      await Promise.all([loadOrphans(), loadMode()])
+      await Promise.all([loadOrphans(), loadMode(), loadBuildInfo()])
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
@@ -1293,9 +1602,71 @@ ${adminStyles}
 
   <div id="panel-view" hidden>
     <nav class="tabs" id="tabs" hidden>
+      <button class="tab" id="tab-home" type="button">首页</button>
       <button class="tab" id="tab-users" type="button">用户管理</button>
       <button class="tab" id="tab-settings" type="button">系统设置</button>
+      <button class="tab" id="tab-about" type="button">关于</button>
     </nav>
+
+    <div id="tab-panel-home" hidden>
+      <section class="kpi-grid">
+        <div class="card kpi">
+          <span class="kpi-label">用户总数</span>
+          <strong class="kpi-value" id="kpi-users">0</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">设备总数</span>
+          <strong class="kpi-value" id="kpi-devices">0</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">待审批</span>
+          <strong class="kpi-value" id="kpi-pending">0</strong>
+        </div>
+        <div class="card kpi">
+          <span class="kpi-label">数据残留</span>
+          <strong class="kpi-value" id="kpi-orphans">0</strong>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>待处理</h2>
+          <span class="muted">点击条目跳转对应页签</span>
+        </div>
+        <div class="todo-list" id="todo-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>最近注册</h2>
+          <span class="muted">按创建时间倒序，最多 5 人</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>状态</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="recent-body"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="recent-empty" hidden>还没有注册记录。</p>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>近 30 天新增</h2>
+          <span class="muted" id="chart-total">近 30 天暂无新增</span>
+        </div>
+        <div class="chart" id="chart-bars"></div>
+        <p class="muted chart-range" id="chart-range"></p>
+      </section>
+
+      <p class="muted build-line" id="build-line" hidden></p>
+    </div>
 
     <div id="tab-panel-users">
       <section class="card">
@@ -1400,6 +1771,45 @@ ${adminStyles}
           </table>
         </div>
         <p class="empty" id="orphans-empty" hidden>没有保留的同步数据。</p>
+      </section>
+    </div>
+
+    <div id="tab-panel-about" hidden>
+      <section class="card about-hero">
+        <h2>LX Music 管理面板</h2>
+        <p class="muted">LX Music 同步服务的管理后台</p>
+        <code class="about-hash" id="about-commit-short">dev</code>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>构建信息</h2>
+          <span class="muted">由部署流程注入</span>
+        </div>
+        <dl class="about-list">
+          <div class="about-row">
+            <dt>产品名称</dt>
+            <dd>LX Music 管理面板</dd>
+          </div>
+          <div class="about-row">
+            <dt>版本号</dt>
+            <dd id="about-version">dev</dd>
+          </div>
+          <div class="about-row">
+            <dt>构建哈希</dt>
+            <dd><code id="about-commit">dev</code></dd>
+          </div>
+          <div class="about-row">
+            <dt>构建时间</dt>
+            <dd id="about-built">—</dd>
+          </div>
+          <div class="about-row">
+            <dt>源码仓库</dt>
+            <dd>
+              <a id="about-repo" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
+            </dd>
+          </div>
+        </dl>
       </section>
     </div>
   </div>
