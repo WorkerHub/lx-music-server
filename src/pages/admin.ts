@@ -103,8 +103,8 @@ th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--lin
 th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 tbody tr:last-child td { border-bottom: none; }
 .name-cell { font-weight: 600; word-break: break-all; }
-.actions-col { width: 1%; white-space: nowrap; }
-.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.actions-col { white-space: nowrap; }
+.row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); }
 .badge.ok { background: var(--ok-bg); color: var(--ok-text); }
 .badge.warn { background: var(--warn-bg); color: var(--warn-text); }
@@ -136,6 +136,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
   .wrap { padding: 16px 12px 48px; }
   .card { padding: 14px; }
   .actions-col { white-space: normal; }
+  .row-actions { flex-wrap: wrap; }
 }
 `
 
