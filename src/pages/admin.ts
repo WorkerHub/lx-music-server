@@ -412,8 +412,36 @@ const adminScript = `
 
   function handleAuth(err) {
     if (err.status !== 401) return false
-    showLogin('登录已过期，请重新登录')
+    endSession('登录已过期，请重新登录')
     return true
+  }
+
+  // Logout and session expiry must leave no trace of the previous session in
+  // the DOM. Clearing state alone is not enough: the tables and the dashboard
+  // would keep rendering the old rows (with their action buttons) until the
+  // next load returns, and a slow request would expose them to clicks.
+  function resetData() {
+    state.users = []
+    state.orphans = []
+    state.usersLoaded = false
+    state.orphansLoaded = false
+    state.build = null
+    state.modeReady = false
+    // These renderers already know the unknown state: they hide the table,
+    // show the unavailable note, disable the mode radios and drop the build
+    // footer / about values back to their fallbacks.
+    renderUsers()
+    renderOrphans()
+    renderMode()
+    renderBuildInfo()
+    renderAbout()
+  }
+
+  // Single exit path for "this session's data must not stay on screen", used
+  // by the logout button and by every 401 handler.
+  function endSession(message) {
+    resetData()
+    showLogin(message)
   }
 
   function showLogin(message) {
@@ -1069,7 +1097,7 @@ const adminScript = `
       if (err.status === 401) {
         modalState.busy = false
         closeModal()
-        showLogin('登录已过期，请重新登录')
+        endSession('登录已过期，请重新登录')
         return
       }
       errorNode.textContent = messageFor(err)
@@ -1514,12 +1542,8 @@ const adminScript = `
         node.disabled = false
       }
       if (!loggedOut) return
-      state.users = []
-      state.orphans = []
-      state.usersLoaded = false
-      state.orphansLoaded = false
       notice('已退出登录', 'ok')
-      showLogin('')
+      endSession('')
     })
 
     $('add-form').addEventListener('submit', async function (event) {
@@ -1628,7 +1652,7 @@ const adminScript = `
       await loadUsers()
     } catch (err) {
       $('boot').hidden = true
-      if (err.status === 401) showLogin('')
+      if (err.status === 401) endSession('')
       else showLogin(messageFor(err))
       return
     }

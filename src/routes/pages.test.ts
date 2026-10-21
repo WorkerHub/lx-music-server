@@ -49,23 +49,33 @@ const pages: Array<[string, string]> = [
 // purpose (the about tab links to the public repository).
 //
 // Rules: matching is case-insensitive (HTML attribute names and CSS function
-// names are), quoted and unquoted attribute values are both caught, and every
-// element that can pull a resource is covered: src/srcset (script, img, iframe,
-// video, audio, source, embed, track, input…), <link href> (stylesheet,
-// preload, icon), object/embed `data`, iframe `srcdoc`, CSS `url()` and
-// `@import`.
+// names are), quoted and unquoted attribute values are both caught, and any
+// whitespace after `=` or after the opening quote is skipped.
+//
+// Covered resource entry points: `src` / `srcset` (script, img, iframe, video,
+// audio, source, embed, track, input, data-src-style lazy loaders…), `<link
+// href>` (stylesheet, preload, icon), `object data`, iframe `srcdoc`, `poster`
+// (video), the legacy `background` attribute, CSS `url()` and `@import`.
+//
+// Known gaps, deliberate: `<meta http-equiv="refresh" content="0;url=...">` is
+// navigation rather than a subresource load (same as an anchor), and HTML
+// entity-encoded URLs (`&#104;ttps://...`) are not decoded by these regexes.
+// Both pages are also served with CSP `default-src 'none'`, so a variant that
+// slips past a rule still cannot load anything.
 //
 // `@import` is banned unconditionally, including same-origin and relative
 // imports: both pages are single self-contained documents, so any import is a
 // violation. The self-test below pins that policy down.
 const EXTERNAL_RESOURCE_PATTERNS: Record<string, RegExp> = {
-  src: /\bsrc\s*=\s*["']?(?:https?:)?\/\//i,
-  srcset: /\bsrcset\s*=\s*["']?(?:https?:)?\/\//i,
-  'object data': /\bdata\s*=\s*["']?(?:https?:)?\/\//i,
-  'iframe srcdoc': /\bsrcdoc\s*=\s*["']?(?:https?:)?\/\//i,
-  '<link href>': /<link\b[^>]*\bhref\s*=\s*["']?(?:https?:)?\/\//i,
+  src: /\bsrc\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  srcset: /\bsrcset\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  'object data': /\bdata\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  'iframe srcdoc': /\bsrcdoc\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  'video poster': /\bposter\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  'body background': /\bbackground\s*=\s*["']?\s*(?:https?:)?\/\//i,
+  '<link href>': /<link\b[^>]*\bhref\s*=\s*["']?\s*(?:https?:)?\/\//i,
   '@import': /@import/i,
-  'css url()': /url\(\s*["']?(?:https?:)?\/\//i,
+  'css url()': /url\(\s*["']?\s*(?:https?:)?\/\//i,
 }
 
 describe('page markup safety', () => {
@@ -93,6 +103,9 @@ describe('page markup safety', () => {
       ['<script src=https://cdn.example/x.js></script>', 'src'],
       ['<SCRIPT SRC="https://cdn.example/x.js"></SCRIPT>', 'src'],
       ['<img src="//cdn.example/x.png">', 'src'],
+      // Whitespace after the `=` and after the opening quote is still a load.
+      ['<script src=  https://cdn.example/x.js></script>', 'src'],
+      ['<img src=" https://cdn.example/x.png">', 'src'],
       ['<img srcset="https://cdn.example/x.png 1x">', 'srcset'],
       [
         '<link rel="stylesheet" href="https://cdn.example/x.css">',
@@ -101,6 +114,10 @@ describe('page markup safety', () => {
       ['<link rel=stylesheet href=https://cdn.example/x.css>', '<link href>'],
       ['<object data="https://cdn.example/x.swf"></object>', 'object data'],
       ['<iframe srcdoc="//cdn.example/x.html"></iframe>', 'iframe srcdoc'],
+      ['<video poster=https://cdn.example/x.jpg></video>', 'video poster'],
+      ['<VIDEO POSTER="https://cdn.example/x.jpg"></VIDEO>', 'video poster'],
+      ['<body background="https://cdn.example/x.png">', 'body background'],
+      ['<BODY BACKGROUND=https://cdn.example/x.png>', 'body background'],
       ['<style>@import "x.css";</style>', '@import'],
       ['<style>@import url(https://cdn.example/x.css);</style>', '@import'],
       [
@@ -126,13 +143,17 @@ describe('page markup safety', () => {
       ).toBe(true)
     }
 
-    // Same-origin or inline references are not external loads.
+    // Same-origin or inline references are not external loads, and neither is
+    // user navigation (an anchor, a meta refresh target).
     const allowed = [
       '<script src="/static/app.js"></script>',
       '<img src="data:image/png;base64,AAAA">',
       '<link rel="icon" href="data:,">',
+      '<video poster="/static/poster.jpg"></video>',
       '<a href="https://github.com/WorkerHub/lx-music-server">repo</a>',
       '<a href=https://github.com/WorkerHub/lx-music-server>repo</a>',
+      '<a href=" https://github.com/WorkerHub/lx-music-server">repo</a>',
+      '<meta http-equiv="refresh" content="0;url=https://example.com">',
     ]
     for (const sample of allowed) {
       expect(
@@ -269,7 +290,7 @@ describe('page markup safety', () => {
     )
     expect(anchor).toContain('target="_blank"')
     expect(anchor).toContain('rel="noopener noreferrer"')
-    expect(adminPageHtml).not.toContain("setAttribute('href'")
+    expect(adminPageHtml).not.toMatch(/setAttribute\s*\(\s*['"]href['"]/)
 
     // dev builds must fall back to 'dev' / '—' instead of undefined or null.
     expect(adminPageHtml).toContain("commit === 'dev'")
@@ -309,6 +330,59 @@ describe('page markup safety', () => {
     expect(
       renderTodo.indexOf("el('p', 'empty', '暂无待处理事项')"),
     ).toBeGreaterThan(renderTodo.indexOf('list.childNodes.length === 0'))
+  })
+
+  it('clears the previous session out of the DOM on logout and on 401', () => {
+    // The reset helper must drop the data and re-render both tables: without
+    // the renders the old rows (and their 删除账号 / 彻底清理 buttons) stay
+    // clickable until the next load returns.
+    const resetData = adminPageHtml.slice(
+      adminPageHtml.indexOf('function resetData'),
+      adminPageHtml.indexOf('function endSession'),
+    )
+    expect(resetData).toContain('state.users = []')
+    expect(resetData).toContain('state.orphans = []')
+    expect(resetData).toContain('state.usersLoaded = false')
+    expect(resetData).toContain('state.orphansLoaded = false')
+    expect(resetData).toContain('state.build = null')
+    expect(resetData).toContain('state.modeReady = false')
+    expect(resetData).toContain('renderUsers()')
+    expect(resetData).toContain('renderOrphans()')
+
+    // Logout goes through that helper instead of only clearing state, and the
+    // login view is shown after the DOM has been reset.
+    const logout = adminPageHtml.slice(
+      adminPageHtml.indexOf("$('logout-btn').addEventListener"),
+      adminPageHtml.indexOf("$('add-form').addEventListener"),
+    )
+    expect(logout).toContain('endSession(')
+    expect(logout).not.toContain('showLogin(')
+    expect(logout).not.toContain('state.users = []')
+
+    const endSession = adminPageHtml.slice(
+      adminPageHtml.indexOf('function endSession'),
+      adminPageHtml.indexOf('function showLogin'),
+    )
+    expect(endSession).toContain('resetData()')
+    expect(endSession.indexOf('resetData()')).toBeLessThan(
+      endSession.indexOf('showLogin('),
+    )
+
+    // Expired sessions (401) take the same path, including the modal submit
+    // branch that handles 401 itself instead of calling handleAuth.
+    const handleAuth = adminPageHtml.slice(
+      adminPageHtml.indexOf('function handleAuth'),
+      adminPageHtml.indexOf('function resetData'),
+    )
+    expect(handleAuth).toContain('err.status !== 401')
+    expect(handleAuth).toContain('endSession(')
+
+    const runModalSubmit = adminPageHtml.slice(
+      adminPageHtml.indexOf('async function runModalSubmit'),
+      adminPageHtml.indexOf('function openRejectModal'),
+    )
+    expect(runModalSubmit).toContain('endSession(')
+    expect(runModalSubmit).not.toContain('showLogin(')
   })
 
   it('drops both tables and the dashboard into an unavailable state on failure', () => {
