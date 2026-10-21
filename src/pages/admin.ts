@@ -220,7 +220,12 @@ const adminScript = `
     usersLoaded: false,
     orphansLoaded: false,
     mode: 'approval',
-    modeReady: false,
+    // The registration mode read is a three-outcome affair, not a boolean:
+    // 'idle' (not requested yet), 'loading' (request in flight), 'ready' (mode
+    // is known) and 'error' (the request failed). Only 'error' may claim a
+    // failure — a pending read used to borrow that copy, so a fresh login
+    // showed "读取失败" for the ~1.5s before /api/registration-info returned.
+    modeStatus: 'idle',
     build: null
   }
   var modalState = {
@@ -435,10 +440,10 @@ const adminScript = `
     state.usersLoaded = false
     state.orphansLoaded = false
     state.build = null
-    state.modeReady = false
+    state.modeStatus = 'idle'
     // The registration mode is unknown until loadMode() returns: keeping the
     // previous value would present a stale selection as fact, so the radios
-    // fall back to "nothing selected" and stay disabled (modeReady = false).
+    // fall back to "nothing selected" and stay disabled (modeStatus = 'idle').
     state.mode = ''
     // These renderers already know the unknown state: they hide the table,
     // show the unavailable note, disable the mode radios and drop the build
@@ -539,14 +544,20 @@ const adminScript = `
 
   async function loadMode(epoch) {
     if (epoch === undefined) epoch = sessionEpoch
+    // A request from an ended session must not even repaint the hint.
+    if (epoch !== sessionEpoch) return
+    // Reading, not failing: the hint says so while the request is outstanding.
+    state.modeStatus = 'loading'
+    renderMode()
     try {
       var data = await api('/api/registration-info')
       if (epoch !== sessionEpoch) return
       state.mode = data && data.registrationMode ? data.registrationMode : 'approval'
-      state.modeReady = true
+      state.modeStatus = 'ready'
     } catch (err) {
       if (epoch !== sessionEpoch) return
-      state.modeReady = false
+      // Only a read that actually failed lands here.
+      state.modeStatus = 'error'
     }
     renderMode()
   }
@@ -774,13 +785,18 @@ const adminScript = `
 
   function renderMode() {
     var radios = document.querySelectorAll('input[name="registrationMode"]')
+    var ready = state.modeStatus === 'ready'
     for (var i = 0; i < radios.length; i++) {
       radios[i].checked = radios[i].value === state.mode
-      radios[i].disabled = !state.modeReady
+      radios[i].disabled = !ready
     }
-    $('mode-hint').textContent = state.modeReady
+    // Three distinct copies for three distinct situations: the failure text is
+    // reserved for a read that actually failed (modeStatus === 'error').
+    $('mode-hint').textContent = ready
       ? '注册页地址：/register；切换后立即生效。'
-      : '注册模式读取失败，请刷新页面重试。'
+      : state.modeStatus === 'error'
+        ? '注册模式读取失败，请刷新页面重试。'
+        : '正在读取注册模式…'
   }
 
   // --- Home dashboard -------------------------------------------------------
@@ -1906,19 +1922,19 @@ ${adminStyles}
         </div>
         <div class="mode-options" id="mode-options">
           <label class="mode-option">
-            <input type="radio" name="registrationMode" value="closed">
+            <input type="radio" name="registrationMode" value="closed" disabled>
             <span><strong>关闭注册</strong><span class="muted">仅管理员可添加用户</span></span>
           </label>
           <label class="mode-option">
-            <input type="radio" name="registrationMode" value="approval">
+            <input type="radio" name="registrationMode" value="approval" disabled>
             <span><strong>需批准（默认）</strong><span class="muted">注册后为待批准，管理员批准后可用</span></span>
           </label>
           <label class="mode-option">
-            <input type="radio" name="registrationMode" value="open">
+            <input type="radio" name="registrationMode" value="open" disabled>
             <span><strong>开放注册</strong><span class="muted">注册后立即可用</span></span>
           </label>
         </div>
-        <p class="hint" id="mode-hint">注册页地址：/register；切换后立即生效。</p>
+        <p class="hint" id="mode-hint">正在读取注册模式…</p>
       </section>
 
       <section class="card">

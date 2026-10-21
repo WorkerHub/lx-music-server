@@ -355,7 +355,8 @@ describe('page markup safety', () => {
     expect(resetData).toContain('state.usersLoaded = false')
     expect(resetData).toContain('state.orphansLoaded = false')
     expect(resetData).toContain('state.build = null')
-    expect(resetData).toContain('state.modeReady = false')
+    // The mode read state is reset too — to "not read yet", never to "failed".
+    expect(resetData).toContain("state.modeStatus = 'idle'")
     // The previous session's registration mode must not stay selected either.
     expect(resetData).toContain("state.mode = ''")
     // In-flight responses from the ended session are invalidated here.
@@ -403,6 +404,80 @@ describe('page markup safety', () => {
     )
     expect(runModalSubmit).toContain('endSession(')
     expect(runModalSubmit).not.toContain('showLogin(')
+  })
+
+  it('shows a neutral loading copy for the registration mode until the read fails', () => {
+    // A pending read is not a failure: the hint has to distinguish "not read
+    // yet / reading" from "the read failed", otherwise the ~1.5s between a
+    // fresh login and /api/registration-info returning shows 读取失败.
+    const renderMode = section('function renderMode', '// --- Home dashboard')
+    expect(renderMode).toContain("var ready = state.modeStatus === 'ready'")
+    expect(renderMode).toContain('radios[i].disabled = !ready')
+    // The failure copy is gated on 'error' and is not the catch-all branch.
+    expect(renderMode).toContain("state.modeStatus === 'error'")
+    expect(renderMode).toContain('正在读取注册模式…')
+    expect(renderMode).toContain('注册模式读取失败')
+    expect(renderMode.indexOf("state.modeStatus === 'error'")).toBeLessThan(
+      renderMode.indexOf('注册模式读取失败'),
+    )
+    // The neutral copy is the fallback of that ternary (idle / loading), and
+    // each copy appears exactly once in the page — the failure text cannot be
+    // reached without the 'error' check above.
+    expect(renderMode.indexOf('注册模式读取失败')).toBeLessThan(
+      renderMode.indexOf('正在读取注册模式…'),
+    )
+    expect(adminPageHtml.split('注册模式读取失败').length - 1).toBe(1)
+    expect(adminPageHtml.split('正在读取注册模式…').length - 1).toBe(2)
+
+    // resetData() (logout / 401) lands on the neutral state, so a re-login
+    // never starts out claiming a failure.
+    const resetData = section('function resetData', 'function endSession')
+    expect(resetData).toContain("state.modeStatus = 'idle'")
+    expect(resetData).not.toContain("'error'")
+
+    // loadMode() announces the read before awaiting it, and only the catch
+    // branch may mark the read as failed.
+    const loadMode = section(
+      'async function loadMode',
+      'async function refreshAll',
+    )
+    expect(loadMode).toContain("state.modeStatus = 'loading'")
+    expect(loadMode).toContain("state.modeStatus = 'ready'")
+    expect(loadMode).toContain("state.modeStatus = 'error'")
+    expect(loadMode.indexOf("state.modeStatus = 'loading'")).toBeLessThan(
+      loadMode.indexOf("state.modeStatus = 'ready'"),
+    )
+    expect(loadMode.indexOf("state.modeStatus = 'ready'")).toBeLessThan(
+      loadMode.indexOf("state.modeStatus = 'error'"),
+    )
+    expect(loadMode.indexOf('state.modeStatus =')).toBeLessThan(
+      loadMode.indexOf('await api('),
+    )
+
+    // A state change is not a repaint: the loading hint has to be painted
+    // before the request is awaited, otherwise the user keeps looking at the
+    // previous copy (or the static first paint) for the whole read. Pinning
+    // the assignment alone would stay green if that renderMode() call were
+    // deleted, so the call itself is pinned between the two.
+    const paintAt = loadMode.indexOf('renderMode()')
+    expect(paintAt).toBeGreaterThan(
+      loadMode.indexOf("state.modeStatus = 'loading'"),
+    )
+    expect(paintAt).toBeLessThan(loadMode.indexOf('await api('))
+    // Both paints survive: one for the in-flight state, one for the settled
+    // state (ready or error) after the await.
+    expect(loadMode.match(/renderMode\(\)/g)).toHaveLength(2)
+
+    // The static first paint is honest as well: the radios start disabled and
+    // the hint starts neutral, before any script has run.
+    expect(adminPageHtml).toContain('id="mode-hint">正在读取注册模式…<')
+    const modeInputs = adminPageHtml.match(
+      /<input type="radio" name="registrationMode"[^>]*>/g,
+    )
+    expect(modeInputs).toHaveLength(3)
+    for (const input of modeInputs ?? []) {
+      expect(input).toContain('disabled')
+    }
   })
 
   it('routes every session exit through endSession()', () => {
