@@ -480,6 +480,60 @@ describe('page markup safety', () => {
     }
   })
 
+  it('settles the registration mode when the panel load fails before the read', () => {
+    // enterPanel() reads the user list first and returns early when it fails,
+    // so /api/registration-info is never sent at all. Left on the neutral copy
+    // the settings hint waits forever for a request that will not happen, so
+    // the panel-level failure has to settle the mode region on its own.
+    const enterPanel = section(
+      'async function enterPanel',
+      'function bindEvents',
+    )
+    const usersCatch = enterPanel.slice(
+      enterPanel.indexOf('await loadUsers(epoch)'),
+      enterPanel.indexOf('if (epoch !== sessionEpoch) return'),
+    )
+    // Comments talk about loadMode()/the request, so only the executable lines
+    // are checked: a comment must not satisfy (or fail) any assertion here.
+    const usersCatchCode = usersCatch.replace(/^\s*\/\/.*$/gm, '')
+    // Deleting either line (or moving them out of this catch) leaves the hint
+    // on "正在读取注册模式…" and turns this red.
+    expect(usersCatchCode).toContain("state.modeStatus = 'error'")
+    expect(usersCatchCode).toContain('renderMode()')
+    // A state change is not a repaint: the hint has to be painted before the
+    // early return, otherwise the user keeps the loading copy.
+    expect(usersCatchCode.indexOf("state.modeStatus = 'error'")).toBeLessThan(
+      usersCatchCode.indexOf('renderMode()'),
+    )
+    expect(usersCatchCode.indexOf('renderMode()')).toBeLessThan(
+      usersCatchCode.indexOf('notice('),
+    )
+    // Settled locally: no second /api/registration-info, no request at all.
+    expect(usersCatchCode).not.toContain('loadMode(')
+    expect(usersCatchCode).not.toContain('api(')
+
+    // The state it lands on is the one that renders the failure copy: the
+    // failure branch is checked before the neutral fallback, so 'error' can
+    // never paint "正在读取".
+    const renderMode = section('function renderMode', '// --- Home dashboard')
+    expect(renderMode).toContain("state.modeStatus === 'error'")
+    expect(renderMode.indexOf("state.modeStatus === 'error'")).toBeLessThan(
+      renderMode.indexOf('注册模式读取失败，请刷新页面重试。'),
+    )
+    expect(
+      renderMode.indexOf('注册模式读取失败，请刷新页面重试。'),
+    ).toBeLessThan(renderMode.indexOf('正在读取注册模式…'))
+    // Every branch of the hint is a fixed literal, so no state (this one
+    // included) can paint `undefined` into the region.
+    expect(renderMode).toContain("'注册页地址：/register；切换后立即生效。'")
+    expect(renderMode).toContain("'注册模式读取失败，请刷新页面重试。'")
+    expect(renderMode).toContain("'正在读取注册模式…'")
+
+    // The radios stay disabled: this path never reaches 'ready'.
+    expect(renderMode).toContain("var ready = state.modeStatus === 'ready'")
+    expect(renderMode).toContain('radios[i].disabled = !ready')
+  })
+
   it('routes every session exit through endSession()', () => {
     // 1. Logout button.
     const logout = section(
