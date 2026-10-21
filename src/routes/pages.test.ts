@@ -433,7 +433,7 @@ describe('page markup safety', () => {
 
     // 4. Registration mode switch.
     const modeSwitch = section(
-      'var radios = document.querySelectorAll',
+      "radios[i].addEventListener('change'",
       'for (var t = 0; t < TAB_ORDER.length; t++)',
     )
     expect(modeSwitch).toContain('if (handleAuth(err)) return')
