@@ -11,7 +11,7 @@
 
 const adminStyles = `
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f4f5f7;
   --card: #ffffff;
   --text: #1b1f24;
@@ -28,22 +28,21 @@ const adminStyles = `
   --danger-text: #b42318;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111418;
-    --card: #1a1f26;
-    --text: #e6e9ee;
-    --muted: #98a2b3;
-    --line: #2b323c;
-    --primary: #3b82f6;
-    --ok-bg: #0d2a1d;
-    --ok-text: #75e0a7;
-    --warn-bg: #2e2410;
-    --warn-text: #fec84b;
-    --danger-bg: #331715;
-    --danger-text: #fda29b;
-    --shadow: none;
-  }
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111418;
+  --card: #1a1f26;
+  --text: #e6e9ee;
+  --muted: #98a2b3;
+  --line: #2b323c;
+  --primary: #3b82f6;
+  --ok-bg: #0d2a1d;
+  --ok-text: #75e0a7;
+  --warn-bg: #2e2410;
+  --warn-text: #fec84b;
+  --danger-bg: #331715;
+  --danger-text: #fda29b;
+  --shadow: none;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -59,7 +58,10 @@ body.modal-open { overflow: hidden; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .topbar h1 { font-size: 20px; margin: 0 0 4px; }
-.topbar-actions { display: flex; gap: 8px; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { flex: none; }
+.theme-select { width: auto; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .tab {
   border: none; background: transparent; color: var(--muted); font: inherit;
@@ -203,6 +205,9 @@ const adminScript = `
   var DEFAULT_TAB = 'home'
   var ACTIVITY_DAYS = 30
   var UNKNOWN = '—'
+  // Persistence key for the theme choice; the value is the mode itself
+  // ('light' | 'dark' | 'auto') so it stays readable from the head script.
+  var THEME_KEY = 'lx-admin-theme'
 
   // Bumped by resetData(). Every request captures the epoch it started in and
   // drops its result (success *or* failure) when the epoch moved on: after a
@@ -294,6 +299,55 @@ const adminScript = `
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild)
+  }
+
+  // --- Theme (light / dark / auto) ---------------------------------------
+  //
+  // The user's choice lives in localStorage and is mirrored onto <html>:
+  // data-theme carries the *resolved* value ('auto' is resolved to the actual
+  // light/dark before it lands there, so the stylesheet only needs
+  // [data-theme="dark"]), while data-theme-mode keeps the choice itself. The
+  // panel has no build step and no framework, so the document element is the
+  // single source of truth for every painter.
+  var darkMedia = null
+
+  function readThemeMode() {
+    try {
+      var stored = localStorage.getItem(THEME_KEY)
+      if (stored === 'light' || stored === 'dark' || stored === 'auto')
+        return stored
+    } catch (err) {
+      // Blocked storage (private mode): behave as "no choice recorded".
+    }
+    return ''
+  }
+
+  function storeThemeMode(mode) {
+    try {
+      localStorage.setItem(THEME_KEY, mode)
+    } catch (err) {
+      // Persisting is a nicety: the choice still applies to this page.
+    }
+  }
+
+  function systemTheme() {
+    return darkMedia && darkMedia.matches ? 'dark' : 'light'
+  }
+
+  function themeMode() {
+    var mode = document.documentElement.getAttribute('data-theme-mode')
+    if (mode === 'light' || mode === 'dark' || mode === 'auto') return mode
+    return 'light'
+  }
+
+  function applyTheme(mode) {
+    var resolved = mode === 'auto' ? systemTheme() : mode
+    var root = document.documentElement
+    root.setAttribute('data-theme', resolved)
+    root.setAttribute('data-theme-mode', mode)
+    root.style.colorScheme = resolved
+    var select = $('theme-select')
+    if (select && select.value !== mode) select.value = mode
   }
 
   function formatTime(value) {
@@ -467,6 +521,12 @@ const adminScript = `
 
   function showLogin(message) {
     closeModal()
+    // The login view is light, always: a theme belongs to a session. The
+    // stored choice is deliberately *not* cleared here, so the next login
+    // restores it (showPanel() re-applies it). Settling it in this one place
+    // covers every entry — logout, 401, and init()'s non-401 failure branch
+    // — because this function is what makes #login-view visible.
+    applyTheme('light')
     $('boot').hidden = true
     $('panel-view').hidden = true
     $('tabs').hidden = true
@@ -489,6 +549,10 @@ const adminScript = `
     $('panel-view').hidden = false
     $('tabs').hidden = false
     $('session-actions').hidden = false
+    // A session restores the last choice; a first visit with nothing recorded
+    // starts on 'auto' (the head script could only resolve that to light, so
+    // the system preference is picked up here).
+    applyTheme(readThemeMode() || 'auto')
     var tab = tabFromHash()
     // Keep the URL and the visible panel in sync, including the first load
     // without a hash: the home tab is the landing page.
@@ -1725,6 +1789,29 @@ const adminScript = `
       bindTab(TAB_ORDER[t])
     }
 
+    $('theme-select').addEventListener('change', function () {
+      var mode = this.value
+      if (mode !== 'light' && mode !== 'dark' && mode !== 'auto') mode = 'light'
+      storeThemeMode(mode)
+      applyTheme(mode)
+    })
+
+    // 'auto' follows the OS appearance live, without a reload. matchMedia is
+    // missing on a few old browsers: the select still works there, only the
+    // live follow is skipped.
+    if (window.matchMedia) {
+      darkMedia = window.matchMedia('(prefers-color-scheme: dark)')
+      var onSystemThemeChange = function () {
+        if (themeMode() !== 'auto') return
+        applyTheme('auto')
+      }
+      if (darkMedia.addEventListener) {
+        darkMedia.addEventListener('change', onSystemThemeChange)
+      } else if (darkMedia.addListener) {
+        darkMedia.addListener(onSystemThemeChange)
+      }
+    }
+
     window.addEventListener('hashchange', function () {
       var tab = tabFromHash()
       normalizeHash(tab)
@@ -1771,8 +1858,32 @@ export const adminPageHtml = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="data:,">
+<link rel="icon" href="/favicon.ico" sizes="any">
 <title>管理面板 · LX Music Server</title>
+<script>
+(function () {
+  // Runs before the stylesheet so the first paint is already correct: a
+  // logged-in panel with a stored dark choice must never flash light first.
+  // The session cannot be read here (the cookie is HttpOnly), so "no record"
+  // resolves straight to light — the logged-out panel is always light — and
+  // showPanel() applies the real choice once the session is known.
+  var mode = 'light'
+  try {
+    var stored = localStorage.getItem('lx-admin-theme')
+    if (stored === 'light' || stored === 'dark' || stored === 'auto') mode = stored
+  } catch (err) {
+    // Blocked storage (private mode) is not fatal: stay light.
+  }
+  var theme = mode
+  if (mode === 'auto' && window.matchMedia) {
+    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  var root = document.documentElement
+  root.setAttribute('data-theme', theme)
+  root.setAttribute('data-theme-mode', mode)
+  root.style.colorScheme = theme
+})()
+</script>
 <style>
 ${adminStyles}
 </style>
@@ -1780,11 +1891,22 @@ ${adminStyles}
 <body>
 <main class="wrap">
   <header class="topbar">
-    <div>
-      <h1>LX Music 管理面板</h1>
-      <p class="muted">管理同步账号、注册模式与保留数据</p>
+    <div class="brand">
+      <svg viewBox="0 0 447.942 447.943" width="28" height="28" aria-hidden="true" focusable="false">
+        <path fill="#5ed698" d="M203.806.482c-19.668-3.346-35.76 11.139-35.76 31.086v206.166c-11.642-4.271-24.165-6.725-37.281-6.725-59.905 0-108.469 48.566-108.469 108.473 0 59.903 48.564 108.461 108.469 108.461 34.141 0 64.54-15.82 84.406-40.482l-49.658-49.664c-15.116-15.112-11.708-28.901-9.542-34.14 2.166-5.233 9.514-17.4 30.883-17.4h18.082v-56.885c0-21.132 14.617-38.862 34.266-43.745.032-44.373.032-81.808.032-81.808 140.147 0 131.724 83.974 115.325 132.196-6.42 18.884-2.601 22.05 10.893 7.354C536.473 77.106 298.38 16.566 203.806.482z" />
+        <path fill="#4daf7c" d="M301.061 223.876h-50.994c-3.911 0-7.574.95-10.889 2.523-8.616 4.09-14.615 12.798-14.615 22.973v76.51h-37.708c-14.082 0-17.428 8.071-7.466 18.029l46.893 46.898 31.25 31.246a25.424 25.424 0 0018.033 7.474c6.523 0 13.052-2.484 18.029-7.474l78.152-78.145c9.951-9.958 6.608-18.029-7.47-18.029h-37.71v-76.51c.001-14.078-11.42-25.495-25.505-25.495z" />
+      </svg>
+      <div>
+        <h1>LX Music 管理面板</h1>
+        <p class="muted">管理同步账号、注册模式与保留数据</p>
+      </div>
     </div>
     <div class="topbar-actions" id="session-actions" hidden>
+      <select class="theme-select" id="theme-select" aria-label="主题">
+        <option value="light">亮色</option>
+        <option value="dark">暗色</option>
+        <option value="auto">跟随系统</option>
+      </select>
       <button class="btn ghost" id="refresh-btn" type="button">刷新</button>
       <button class="btn ghost" id="logout-btn" type="button">退出登录</button>
     </div>

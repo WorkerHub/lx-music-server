@@ -279,7 +279,7 @@ export const registerPageHtml = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="data:,">
+<link rel="icon" href="/favicon.ico" sizes="any">
 <title>注册 · LX Music Server</title>
 <style>
 ${registerStyles}
