@@ -116,6 +116,15 @@ tbody tr:last-child td { border-bottom: none; }
 .name-cell { font-weight: 600; word-break: break-all; }
 .actions-col { white-space: nowrap; }
 .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+/* 用户表专属布局：操作列贴右、列宽按内容自适应、富余宽度归第一列。
+   全部选择器都限定在 .users-table 内，残留数据表与弹窗按钮布局不受影响。 */
+.users-table { table-layout: auto; width: 100%; }
+.users-table th, .users-table td { white-space: nowrap; }
+.users-table th:first-child, .users-table td:first-child { width: 100%; }
+.users-table th.actions-col, .users-table td.actions-col { text-align: right; }
+.users-table .row-actions { justify-content: flex-end; flex-wrap: nowrap; }
+.users-table th:nth-child(5), .users-table td:nth-child(5),
+.users-table th:nth-child(6), .users-table td:nth-child(6) { text-align: right; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); }
 .badge.ok { background: var(--ok-bg); color: var(--ok-text); }
 .badge.warn { background: var(--warn-bg); color: var(--warn-text); }
@@ -173,7 +182,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .build-line { margin: 0; font-size: 12px; text-align: center; }
 .about-hero { display: flex; flex-direction: column; gap: 4px; }
 .about-hero h2 { font-size: 18px; }
-.about-hash { display: inline-block; margin-top: 6px; font-size: 20px; font-weight: 700; }
 .about-list { margin: 0; }
 .about-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .about-row:last-child { border-bottom: none; }
@@ -1138,7 +1146,6 @@ const adminScript = `
     var commit = buildCommit()
     $('about-version').textContent = versionText()
     $('about-commit').textContent = commit
-    $('about-commit-short').textContent = shortCommit(commit)
     $('about-built').textContent = buildBuiltAt() ? formatTime(buildBuiltAt()) : '—'
   }
 
@@ -1897,8 +1904,8 @@ ${adminStyles}
         <path fill="#4daf7c" d="M301.061 223.876h-50.994c-3.911 0-7.574.95-10.889 2.523-8.616 4.09-14.615 12.798-14.615 22.973v76.51h-37.708c-14.082 0-17.428 8.071-7.466 18.029l46.893 46.898 31.25 31.246a25.424 25.424 0 0018.033 7.474c6.523 0 13.052-2.484 18.029-7.474l78.152-78.145c9.951-9.958 6.608-18.029-7.47-18.029h-37.71v-76.51c.001-14.078-11.42-25.495-25.505-25.495z" />
       </svg>
       <div>
-        <h1>LX Music 管理面板</h1>
-        <p class="muted">管理同步账号、注册模式与保留数据</p>
+        <h1>LX Music server 管理面板</h1>
+        <p class="muted">一个兼容官方同步协议的重构版</p>
       </div>
     </div>
     <div class="topbar-actions" id="session-actions" hidden>
@@ -2004,7 +2011,7 @@ ${adminStyles}
           <span class="muted" id="users-count"></span>
         </div>
         <div class="table-wrap" id="users-table-wrap">
-          <table>
+          <table class="users-table">
             <thead>
               <tr>
                 <th>用户名</th>
@@ -2107,20 +2114,18 @@ ${adminStyles}
 
     <div id="tab-panel-about" hidden>
       <section class="card about-hero">
-        <h2>LX Music 管理面板</h2>
+        <h2>LX Music server 管理面板</h2>
         <p class="muted">LX Music 同步服务的管理后台</p>
-        <code class="about-hash" id="about-commit-short">dev</code>
       </section>
 
       <section class="card">
         <div class="section-head">
           <h2>构建信息</h2>
-          <span class="muted">由部署流程注入</span>
         </div>
         <dl class="about-list">
           <div class="about-row">
             <dt>产品名称</dt>
-            <dd>LX Music 管理面板</dd>
+            <dd>LX Music server 管理面板</dd>
           </div>
           <div class="about-row">
             <dt>版本号</dt>
@@ -2139,6 +2144,29 @@ ${adminStyles}
             <dd>
               <a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
             </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>致谢</h2>
+        </div>
+        <p class="muted">
+          本项目是 <a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">原始项目</a> 的重构版本，运行在 Cloudflare Worker 上，完全兼容原始项目的通信协议。另外在此基础上添加了后台管理页面，以方便管理用户。
+        </p>
+        <dl class="about-list">
+          <div class="about-row">
+            <dt>原始项目</dt>
+            <dd><a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">lx-music-sync-server</a></dd>
+          </div>
+          <div class="about-row">
+            <dt>相关项目</dt>
+            <dd><a href="https://github.com/lyswhut/lx-music-desktop" target="_blank" rel="noopener noreferrer">lx-music-desktop</a></dd>
+          </div>
+          <div class="about-row">
+            <dt>相关项目</dt>
+            <dd><a href="https://github.com/lyswhut/lx-music-mobile" target="_blank" rel="noopener noreferrer">lx-music-mobile</a></dd>
           </div>
         </dl>
       </section>
