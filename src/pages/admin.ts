@@ -204,6 +204,13 @@ const adminScript = `
   var ACTIVITY_DAYS = 30
   var UNKNOWN = '—'
 
+  // Bumped by resetData(). Every request captures the epoch it started in and
+  // drops its result (success *or* failure) when the epoch moved on: after a
+  // logout or a 401, a response that arrives late must neither land in state
+  // nor repaint the DOM, otherwise the next login's first paint would show the
+  // previous session's rows again (the F5 leak, one request later).
+  var sessionEpoch = 0
+
   var state = {
     users: [],
     orphans: [],
@@ -421,12 +428,18 @@ const adminScript = `
   // would keep rendering the old rows (with their action buttons) until the
   // next load returns, and a slow request would expose them to clicks.
   function resetData() {
+    // Any request already in flight belongs to the session that just ended.
+    sessionEpoch++
     state.users = []
     state.orphans = []
     state.usersLoaded = false
     state.orphansLoaded = false
     state.build = null
     state.modeReady = false
+    // The registration mode is unknown until loadMode() returns: keeping the
+    // previous value would present a stale selection as fact, so the radios
+    // fall back to "nothing selected" and stay disabled (modeReady = false).
+    state.mode = ''
     // These renderers already know the unknown state: they hide the table,
     // show the unavailable note, disable the mode radios and drop the build
     // footer / about values back to their fallbacks.
@@ -475,7 +488,12 @@ const adminScript = `
     activateTab(tab)
   }
 
-  async function loadUsers() {
+  // The epoch argument is supplied by composite flows (refreshAll /
+  // enterPanel) that started earlier: if a logout happens in between, the
+  // whole chain becomes a no-op instead of repopulating a panel the user has
+  // already left.
+  async function loadUsers(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
     var data
     try {
       data = await api('/api/admin/users')
@@ -483,18 +501,22 @@ const adminScript = `
     } catch (err) {
       // Same policy as the orphan list: a failed refresh drops the table into
       // its unavailable state instead of leaving rows with live action buttons
-      // that may act on stale data.
+      // that may act on stale data. A response from an ended session is
+      // dropped entirely.
+      if (epoch !== sessionEpoch) return
       state.users = []
       state.usersLoaded = false
       renderUsers()
       throw err
     }
+    if (epoch !== sessionEpoch) return
     state.users = data.users
     state.usersLoaded = true
     renderUsers()
   }
 
-  async function loadOrphans() {
+  async function loadOrphans(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
     var data
     try {
       data = await api('/api/admin/orphans')
@@ -503,30 +525,39 @@ const adminScript = `
       // The list is unknown, not empty: drop back to the unknown state so the
       // home KPI and the settings table never show stale data (or a 0) that a
       // "彻底清理" click could act on.
+      if (epoch !== sessionEpoch) return
       state.orphans = []
       state.orphansLoaded = false
       renderOrphans()
       throw err
     }
+    if (epoch !== sessionEpoch) return
     state.orphans = data
     state.orphansLoaded = true
     renderOrphans()
   }
 
-  async function loadMode() {
+  async function loadMode(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
     try {
       var data = await api('/api/registration-info')
+      if (epoch !== sessionEpoch) return
       state.mode = data && data.registrationMode ? data.registrationMode : 'approval'
       state.modeReady = true
     } catch (err) {
+      if (epoch !== sessionEpoch) return
       state.modeReady = false
     }
     renderMode()
   }
 
+  // The two lists are always refreshed together, so both are pinned to the
+  // epoch captured here rather than to whatever session is current by the time
+  // each request actually starts.
   async function refreshAll() {
-    await loadUsers()
-    await loadOrphans()
+    var epoch = sessionEpoch
+    await loadUsers(epoch)
+    await loadOrphans(epoch)
   }
 
   function renderUsers() {
@@ -985,13 +1016,18 @@ const adminScript = `
     return version === 'dev' ? 'dev' : 'v' + version
   }
 
-  async function loadBuildInfo() {
+  async function loadBuildInfo(epoch) {
+    if (epoch === undefined) epoch = sessionEpoch
     try {
       var data = await api('/api/admin/build-info')
+      if (epoch !== sessionEpoch) return
       state.build = data && typeof data === 'object' ? data : null
     } catch (err) {
-      // Build metadata is cosmetic: a failure hides the footer instead of
-      // interrupting the panel. Session expiry is handled by the data loads.
+      if (epoch !== sessionEpoch) return
+      // Build metadata itself is cosmetic, but the request is authenticated: a
+      // 401 here means the session expired, so it takes the same exit as every
+      // other authenticated call instead of being swallowed as "no footer".
+      if (handleAuth(err)) return
       state.build = null
     }
     renderBuildInfo()
@@ -1094,6 +1130,9 @@ const adminScript = `
       modalState.busy = false
       if (closeOnSuccess) closeModal()
     } catch (err) {
+      // A 401 is a session expiry, not a field error: the modals below rethrow
+      // it so this branch closes the dialog and resets the panel, instead of
+      // painting "登录已过期" inside a dialog that is still on screen.
       if (err.status === 401) {
         modalState.busy = false
         closeModal()
@@ -1123,6 +1162,7 @@ const adminScript = `
             method: 'POST'
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 409) return '该账号状态已变化，请刷新后重试'
           return messageFor(err)
         }
@@ -1172,6 +1212,7 @@ const adminScript = `
             }
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 400) return '配置不符合要求'
           return messageFor(err)
         }
@@ -1218,6 +1259,7 @@ const adminScript = `
             }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 502 && err.data && err.data.passwordChanged) {
             return '密码已修改，但设备解绑失败；请稍后重试，或在设备列表中手动删除设备。'
           }
@@ -1252,6 +1294,7 @@ const adminScript = `
             method: 'DELETE'
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 502 && err.data && err.data.orphaned) {
             notice(
               '账号已删除、同步数据保留，但设备解绑失败，请在设备列表中手动清理',
@@ -1290,6 +1333,7 @@ const adminScript = `
             }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 409) return '该用户名已被占用，无法恢复'
           if (err.status === 404) return '该数据残留已不存在'
           if (err.status === 400) return '密码需为 8–128 位'
@@ -1330,6 +1374,7 @@ const adminScript = `
             body: { confirmName: input.value }
           })
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 400) return '确认用户名不一致'
           if (err.status === 404) return '该数据残留已不存在'
           if (err.status === 502) return '同步数据清理失败，墓碑已保留，请稍后重试'
@@ -1358,16 +1403,19 @@ const adminScript = `
   }
 
   async function loadDeviceList(name, container) {
+    var epoch = sessionEpoch
     clear(container)
     container.appendChild(el('p', 'muted', '正在读取设备…'))
     var devices
     try {
       devices = await api('/api/admin/users/' + encodeURIComponent(name) + '/devices')
     } catch (err) {
+      if (epoch !== sessionEpoch) return
       if (err.status === 401) {
+        // The dialog belongs to the expired session: close it, then take the
+        // same reset exit as every other 401.
         closeModal()
-        showLogin('登录已过期，请重新登录')
-        return
+        if (handleAuth(err)) return
       }
       clear(container)
       container.appendChild(
@@ -1380,6 +1428,7 @@ const adminScript = `
       return
     }
 
+    if (epoch !== sessionEpoch) return
     clear(container)
     if (!Array.isArray(devices) || devices.length === 0) {
       container.appendChild(el('p', 'muted', '该用户还没有配对设备。'))
@@ -1447,6 +1496,7 @@ const adminScript = `
             { method: 'DELETE' }
           )
         } catch (err) {
+          if (err.status === 401) throw err
           if (err.status === 404) return '设备已不存在'
           if (err.status === 502) return '该用户的同步数据暂时不可用'
           return messageFor(err)
@@ -1468,16 +1518,21 @@ const adminScript = `
   }
 
   async function enterPanel() {
+    // Pin the whole login sequence to one session: if the user logs out while
+    // the first list is still loading, the remaining loads must not run (and
+    // must not repopulate the panel behind the login form).
+    var epoch = sessionEpoch
     showPanel()
     try {
-      await loadUsers()
+      await loadUsers(epoch)
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')
       return
     }
+    if (epoch !== sessionEpoch) return
     try {
-      await Promise.all([loadOrphans(), loadMode(), loadBuildInfo()])
+      await Promise.all([loadOrphans(epoch), loadMode(epoch), loadBuildInfo(epoch)])
     } catch (err) {
       if (handleAuth(err)) return
       notice(messageFor(err), 'err')

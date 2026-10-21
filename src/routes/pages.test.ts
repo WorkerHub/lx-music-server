@@ -79,6 +79,16 @@ const EXTERNAL_RESOURCE_PATTERNS: Record<string, RegExp> = {
 }
 
 describe('page markup safety', () => {
+  // Slice of the inline script between two markers, so an assertion can only
+  // pass on the code it names. Both markers must exist and come in order.
+  const section = (start: string, end: string): string => {
+    const from = adminPageHtml.indexOf(start)
+    expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+    const to = adminPageHtml.indexOf(end, from + start.length)
+    expect(to, `missing end marker: ${end}`).toBeGreaterThan(from)
+    return adminPageHtml.slice(from, to)
+  }
+
   for (const [name, html] of pages) {
     it(`${name} page has no HTML injection sinks`, () => {
       expect(html).not.toMatch(
@@ -346,8 +356,18 @@ describe('page markup safety', () => {
     expect(resetData).toContain('state.orphansLoaded = false')
     expect(resetData).toContain('state.build = null')
     expect(resetData).toContain('state.modeReady = false')
+    // The previous session's registration mode must not stay selected either.
+    expect(resetData).toContain("state.mode = ''")
+    // In-flight responses from the ended session are invalidated here.
+    expect(resetData).toContain('sessionEpoch++')
+    // Every renderer the panel has, not just the two tables: the dashboard,
+    // the settings radios, the build footer and the about fields all fall back
+    // to their unknown/empty state in the same tick.
     expect(resetData).toContain('renderUsers()')
     expect(resetData).toContain('renderOrphans()')
+    expect(resetData).toContain('renderMode()')
+    expect(resetData).toContain('renderBuildInfo()')
+    expect(resetData).toContain('renderAbout()')
 
     // Logout goes through that helper instead of only clearing state, and the
     // login view is shown after the DOM has been reset.
@@ -383,6 +403,242 @@ describe('page markup safety', () => {
     )
     expect(runModalSubmit).toContain('endSession(')
     expect(runModalSubmit).not.toContain('showLogin(')
+  })
+
+  it('routes every session exit through endSession()', () => {
+    // 1. Logout button.
+    const logout = section(
+      "$('logout-btn').addEventListener",
+      "$('add-form').addEventListener",
+    )
+    expect(logout).toContain('endSession(')
+    expect(logout).not.toContain('showLogin(')
+    expect(logout).not.toContain('state.users = []')
+
+    // 2. Refresh button: any of the three loads may 401.
+    const refresh = section(
+      "$('refresh-btn').addEventListener",
+      "$('logout-btn').addEventListener",
+    )
+    expect(refresh).toContain('if (!handleAuth(err))')
+    expect(refresh).not.toContain('showLogin(')
+
+    // 3. Add-user form.
+    const addForm = section(
+      "$('add-form').addEventListener",
+      'var addPassword = $',
+    )
+    expect(addForm).toContain('if (handleAuth(err)) return')
+    expect(addForm).not.toContain('showLogin(')
+
+    // 4. Registration mode switch.
+    const modeSwitch = section(
+      'var radios = document.querySelectorAll',
+      'for (var t = 0; t < TAB_ORDER.length; t++)',
+    )
+    expect(modeSwitch).toContain('if (handleAuth(err)) return')
+    expect(modeSwitch).not.toContain('showLogin(')
+
+    // 5. Login form: a wrong password is not a session exit (there is no
+    // session yet), so it must NOT reset anything.
+    const loginForm = section(
+      "$('login-form').addEventListener",
+      "$('refresh-btn').addEventListener",
+    )
+    expect(loginForm).toContain(
+      "if (err.status === 401) errorNode.textContent = '密码错误'",
+    )
+    expect(loginForm).not.toContain('endSession(')
+
+    // 6. First load: 401 resets, any other failure shows the login view with
+    // the error (nothing to reset yet).
+    const init = section('async function init', 'bindEvents()\n  init()')
+    expect(init).toContain("if (err.status === 401) endSession('')")
+    expect(init).toContain('else showLogin(messageFor(err))')
+
+    // 7. Post-login load sequence: both stages route 401 through handleAuth.
+    const enterPanel = section(
+      'async function enterPanel',
+      'function bindEvents',
+    )
+    expect(enterPanel.match(/if \(handleAuth\(err\)\) return/g)).toHaveLength(2)
+    expect(enterPanel).not.toContain('showLogin(')
+
+    // 8. Row actions (approve / disable / enable) and their refresh.
+    const runAction = section(
+      'async function runAction',
+      'function summaryText',
+    )
+    expect(runAction).toContain('if (handleAuth(err)) return')
+    expect(runAction).not.toContain('showLogin(')
+
+    // 9. Modal submit: the single 401 branch that closes the dialog first.
+    const runModalSubmit = section(
+      'async function runModalSubmit',
+      'function openRejectModal',
+    )
+    expect(runModalSubmit).toContain("endSession('登录已过期，请重新登录')")
+    expect(runModalSubmit).not.toContain('showLogin(')
+
+    // 10. Every modal submit rethrows 401 into that branch instead of turning
+    // it into an inline field error.
+    const modals: Array<[string, string]> = [
+      ['openRejectModal', 'function openEditModal'],
+      ['openEditModal', 'function openResetModal'],
+      ['openResetModal', 'function openDeleteModal'],
+      ['openDeleteModal', 'function openRestoreModal'],
+      ['openRestoreModal', 'function openPurgeModal'],
+      ['openPurgeModal', 'function openDevicesModalFor'],
+      ['openDeleteDeviceModal', 'function bindTab'],
+    ]
+    for (const [name, end] of modals) {
+      const body = section(`function ${name}`, end)
+      expect(body, name).toContain('if (err.status === 401) throw err')
+      expect(body, name).not.toContain('showLogin(')
+    }
+
+    // 11. Device dialog loader (F6): close the dialog, then the shared exit.
+    const deviceList = section(
+      'async function loadDeviceList',
+      'function openDeleteDeviceModal',
+    )
+    expect(deviceList).toContain('closeModal()')
+    expect(deviceList).toContain('if (handleAuth(err)) return')
+    expect(deviceList).not.toContain('showLogin(')
+
+    // 12. Build-info loader (S3): an authenticated request, so a 401 is a
+    // session expiry, not a cosmetic failure.
+    const buildInfo = section(
+      'async function loadBuildInfo',
+      'function renderBuildInfo',
+    )
+    expect(buildInfo).toContain('if (handleAuth(err)) return')
+    expect(buildInfo).not.toContain('showLogin(')
+    expect(buildInfo).not.toContain(
+      'Session expiry is handled by the data loads',
+    )
+
+    // 13. The exit helpers themselves.
+    const handleAuth = section('function handleAuth', 'function resetData')
+    expect(handleAuth).toContain('if (err.status !== 401) return false')
+    expect(handleAuth).toContain('endSession(')
+
+    const endSession = section('function endSession', 'function showLogin')
+    expect(endSession).toContain('resetData()')
+  })
+
+  it('keeps showLogin() behind the single session-exit path', () => {
+    // The whole point of the audit: a new "session ended" path must call
+    // endSession()/resetData(), never showLogin() directly. Exactly three call
+    // sites are allowed — the definition, endSession() itself, and init()'s
+    // non-401 first-load branch (where no session exists to reset). A fourth
+    // one means a path bypassed the reset and would leak the old rows.
+    const callSites = adminPageHtml
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.includes('showLogin('))
+    expect(callSites.sort()).toEqual(
+      [
+        'function showLogin(message) {',
+        'showLogin(message)',
+        'else showLogin(messageFor(err))',
+      ].sort(),
+    )
+  })
+
+  it('drops responses that arrive after the session was reset', () => {
+    expect(adminPageHtml).toContain('var sessionEpoch = 0')
+    const resetData = section('function resetData', 'function endSession')
+    expect(resetData).toContain('sessionEpoch++')
+
+    // Every loader must carry the guard, so a loader added later cannot skip
+    // it without failing this list and the per-loader checks below.
+    const loaderStarts = [
+      ...adminPageHtml.matchAll(/async function (load\w+)/g),
+    ]
+    expect(loaderStarts.map((match) => match[1])).toEqual([
+      'loadUsers',
+      'loadOrphans',
+      'loadMode',
+      'loadBuildInfo',
+      'loadDeviceList',
+    ])
+    for (const match of loaderStarts) {
+      const from = match.index ?? 0
+      const rest = adminPageHtml.slice(from + 1)
+      const nextFunction = rest.search(/\n {2}(?:async )?function /)
+      const body = adminPageHtml.slice(from, from + 1 + nextFunction)
+      expect(body, match[1]).toContain('sessionEpoch')
+      expect(body, match[1]).toMatch(/epoch !== sessionEpoch/)
+    }
+
+    // The guard sits before the write, in the failure path as well as the
+    // success path: a late 200 must not land in state, a late 401 must not
+    // reset a session that has already been replaced.
+    const users = section(
+      'async function loadUsers',
+      'async function loadOrphans',
+    )
+    expect(users.match(/if \(epoch !== sessionEpoch\) return/g)).toHaveLength(2)
+    expect(users.indexOf('if (epoch !== sessionEpoch) return')).toBeLessThan(
+      users.indexOf('state.users = data.users'),
+    )
+
+    const orphans = section(
+      'async function loadOrphans',
+      'async function loadMode',
+    )
+    expect(orphans.match(/if \(epoch !== sessionEpoch\) return/g)).toHaveLength(
+      2,
+    )
+    expect(orphans.indexOf('if (epoch !== sessionEpoch) return')).toBeLessThan(
+      orphans.indexOf('state.orphans = data'),
+    )
+
+    const buildInfo = section(
+      'async function loadBuildInfo',
+      'function renderBuildInfo',
+    )
+    expect(
+      buildInfo.match(/if \(epoch !== sessionEpoch\) return/g),
+    ).toHaveLength(2)
+    expect(
+      buildInfo.indexOf('if (epoch !== sessionEpoch) return'),
+    ).toBeLessThan(buildInfo.indexOf('state.build ='))
+
+    const devices = section(
+      'async function loadDeviceList',
+      'function openDeleteDeviceModal',
+    )
+    expect(devices.match(/if \(epoch !== sessionEpoch\) return/g)).toHaveLength(
+      2,
+    )
+    expect(devices.indexOf('if (epoch !== sessionEpoch) return')).toBeLessThan(
+      devices.indexOf('container.appendChild(wrap)'),
+    )
+
+    // Composite flows pin the epoch they started in, so a logout between two
+    // awaits cannot let the rest of the chain repopulate the panel.
+    const refreshAll = section(
+      'async function refreshAll',
+      'function renderUsers',
+    )
+    expect(refreshAll).toContain('var epoch = sessionEpoch')
+    expect(refreshAll).toContain('loadUsers(epoch)')
+    expect(refreshAll).toContain('loadOrphans(epoch)')
+
+    const enterPanel = section(
+      'async function enterPanel',
+      'function bindEvents',
+    )
+    expect(enterPanel).toContain('var epoch = sessionEpoch')
+    expect(enterPanel).toContain('loadUsers(epoch)')
+    expect(enterPanel).toContain(
+      'loadOrphans(epoch), loadMode(epoch), loadBuildInfo(epoch)',
+    )
+    expect(
+      enterPanel.indexOf('if (epoch !== sessionEpoch) return'),
+    ).toBeLessThan(enterPanel.indexOf('Promise.all('))
   })
 
   it('drops both tables and the dashboard into an unavailable state on failure', () => {
