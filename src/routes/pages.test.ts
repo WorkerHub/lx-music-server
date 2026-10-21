@@ -454,6 +454,20 @@ describe('page markup safety', () => {
       loadMode.indexOf('await api('),
     )
 
+    // A state change is not a repaint: the loading hint has to be painted
+    // before the request is awaited, otherwise the user keeps looking at the
+    // previous copy (or the static first paint) for the whole read. Pinning
+    // the assignment alone would stay green if that renderMode() call were
+    // deleted, so the call itself is pinned between the two.
+    const paintAt = loadMode.indexOf('renderMode()')
+    expect(paintAt).toBeGreaterThan(
+      loadMode.indexOf("state.modeStatus = 'loading'"),
+    )
+    expect(paintAt).toBeLessThan(loadMode.indexOf('await api('))
+    // Both paints survive: one for the in-flight state, one for the settled
+    // state (ready or error) after the await.
+    expect(loadMode.match(/renderMode\(\)/g)).toHaveLength(2)
+
     // The static first paint is honest as well: the radios start disabled and
     // the hint starts neutral, before any script has run.
     expect(adminPageHtml).toContain('id="mode-hint">正在读取注册模式…<')
