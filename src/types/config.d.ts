@@ -55,5 +55,10 @@ declare namespace LX {
     LX_ADMIN_PASSWORD_HASH?: string
     SERVER_NAME: string
     RATE_LIMITER?: RateLimiterBinding
+    // Public build metadata injected by the deploy workflow (see
+    // `.github/workflows/deploy.yml`), surfaced by GET /api/admin/build-info.
+    BUILD_VERSION?: string
+    BUILD_COMMIT?: string
+    BUILD_TIME?: string
   }
 }

@@ -676,3 +676,60 @@ describe('admin registration settings', () => {
     expect(invalid.status).toBe(400)
   })
 })
+
+describe('admin build info', () => {
+  const BUILD_COMMIT = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+
+  it('requires a session like every other protected endpoint', async () => {
+    const { env } = await setup()
+
+    const res = await app.request('/api/admin/build-info', {}, env)
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
+  })
+
+  it('returns the injected build metadata verbatim', async () => {
+    const { env } = await setup()
+    env.BUILD_VERSION = '1.0.0'
+    env.BUILD_COMMIT = BUILD_COMMIT
+    env.BUILD_TIME = '2026-10-21T06:47:30Z'
+    const cookie = await login(env)
+
+    const res = await app.request('/api/admin/build-info', authed(cookie), env)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      version: '1.0.0',
+      commit: BUILD_COMMIT,
+      builtAt: '2026-10-21T06:47:30Z',
+    })
+  })
+
+  it('falls back to dev/null when nothing was injected', async () => {
+    const { env } = await setup()
+    const cookie = await login(env)
+
+    const res = await app.request('/api/admin/build-info', authed(cookie), env)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      version: 'dev',
+      commit: 'dev',
+      builtAt: null,
+    })
+  })
+
+  it('treats blank values as not injected', async () => {
+    const { env } = await setup()
+    env.BUILD_VERSION = '  '
+    env.BUILD_COMMIT = ''
+    env.BUILD_TIME = '   '
+    const cookie = await login(env)
+
+    const res = await app.request('/api/admin/build-info', authed(cookie), env)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      version: 'dev',
+      commit: 'dev',
+      builtAt: null,
+    })
+  })
+})

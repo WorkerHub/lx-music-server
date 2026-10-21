@@ -106,10 +106,22 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm wrangler deploy --secrets-file .secrets.json 2>&1 | sed -E \
+          # Public build metadata (not secrets): the panel's home footer and
+          # about page read it through GET /api/admin/build-info. BUILD_COMMIT
+          # must be the SHA this workflow actually deployed, which under
+          # workflow_run is head_sha, not github.sha.
+          BUILD_VERSION="$(node -p "require('./package.json').version")"
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "build info: version=$BUILD_VERSION commit=$BUILD_COMMIT builtAt=$BUILD_TIME"
+          pnpm wrangler deploy \
+            --secrets-file .secrets.json \
+            --var "BUILD_VERSION:$BUILD_VERSION" \
+            --var "BUILD_COMMIT:$BUILD_COMMIT" \
+            --var "BUILD_TIME:$BUILD_TIME" 2>&1 | sed -E \
             -e 's/env\.LX_USERS \(".*"\)/env.LX_USERS (***)/g' \
             -e 's/env\.LX_ADMIN_PASSWORD_HASH \(".*"\)/env.LX_ADMIN_PASSWORD_HASH (***)/g' \
             -e 's/env\.KV[^ ]* \([^)]*\)/env.KV (***)/g' \
             -e 's#https://([a-z0-9-]+)\.[a-z0-9-]+\.workers\.dev/?#https://\1.***.workers.dev/#gI'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          BUILD_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}

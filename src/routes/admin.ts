@@ -202,6 +202,16 @@ const parseUserConfig = (
 
 const hasError = (value: object): value is { error: string } => 'error' in value
 
+// Build metadata is injected by the deploy workflow as plain Worker vars (public
+// values, not secrets). Unset, blank and stringified sentinels all mean "not
+// injected", so the response never carries undefined or a literal "null".
+const NOT_INJECTED = new Set(['', 'undefined', 'null'])
+const readBuildVar = (value: string | undefined): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return NOT_INJECTED.has(trimmed.toLowerCase()) ? null : trimmed
+}
+
 // Unconfigured deployments expose nothing: no panel, no admin API.
 app.use('/api/admin/*', async (c, next) => {
   if (!getAdminPasswordHash(c.env)) return c.notFound()
@@ -244,6 +254,17 @@ app.post('/api/admin/login', async (c) => {
 app.post('/api/admin/logout', (c) => {
   deleteCookie(c, ADMIN_COOKIE_NAME, { path: '/' })
   return c.body(null, 204)
+})
+
+// Read-only build metadata for the panel's home footer and about page. Values
+// come from the deploy workflow; `builtAt` is passed through as the ISO 8601
+// string the workflow wrote, with no timezone conversion.
+app.get('/api/admin/build-info', (c) => {
+  return c.json({
+    version: readBuildVar(c.env.BUILD_VERSION) ?? 'dev',
+    commit: readBuildVar(c.env.BUILD_COMMIT) ?? 'dev',
+    builtAt: readBuildVar(c.env.BUILD_TIME),
+  })
 })
 
 app.get('/api/admin/users', async (c) => {
