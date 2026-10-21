@@ -647,6 +647,110 @@ describe('page markup safety', () => {
     expect(ok.state.modeStatus).toBe('loading')
   })
 
+  // renderMode() is the only place that decides what the three radios show, so
+  // its checked/disabled pair is exercised against a fake DOM instead of being
+  // pinned by string matching: an assertion on the source line would stay green
+  // for any expression that still paints the stale mode as selected. The same
+  // painter is reused across states, because the bug is a transition — a read
+  // that succeeded and then failed leaves the previous value in state.mode.
+  const makeModePainter = () => {
+    const source = section('function renderMode', '// --- Home dashboard')
+    const radios = ['closed', 'approval', 'open'].map((value) => ({
+      value,
+      checked: false,
+      disabled: false,
+    }))
+    const hint = { textContent: '' }
+    const document = { querySelectorAll: () => radios }
+    const $ = (id: string) => {
+      expect(id).toBe('mode-hint')
+      return hint
+    }
+    const state: { mode: string; modeStatus: string } = {
+      mode: '',
+      modeStatus: 'idle',
+    }
+    const renderMode = new Function(
+      'state',
+      'document',
+      '$',
+      `${source}\nreturn renderMode`,
+    )(state, document, $) as () => void
+    return {
+      hint,
+      state,
+      // Omitted `mode` keeps the current value: a failed read does not rewrite
+      // state.mode, it only changes the status.
+      paint: (modeStatus: string, mode?: string) => {
+        state.modeStatus = modeStatus
+        if (mode !== undefined) state.mode = mode
+        renderMode()
+        return radios.map((radio) => ({
+          value: radio.value,
+          checked: radio.checked,
+          disabled: radio.disabled,
+        }))
+      },
+    }
+  }
+
+  it('never paints a stale registration mode as selected', () => {
+    const painter = makeModePainter()
+    const values = ['closed', 'approval', 'open']
+
+    // The reported bug: /api/registration-info failed after a successful read,
+    // so state.mode still says 'open'. Nothing may look selected while the
+    // mode is unknown — a checked radio is read as "this is the live mode".
+    painter.paint('ready', 'open')
+    const failed = painter.paint('error')
+    expect(painter.state.mode).toBe('open')
+    expect(failed.map((radio) => radio.checked)).toEqual([false, false, false])
+    expect(failed.map((radio) => radio.disabled)).toEqual([true, true, true])
+    expect(painter.hint.textContent).toBe('注册模式读取失败，请刷新页面重试。')
+
+    // Every not-ready status behaves the same: nothing selected, all disabled.
+    // 'idle' covers the logout / first-paint state, 'loading' the read in
+    // flight (and the repaint it triggers after a failed one).
+    for (const modeStatus of ['error', 'idle', 'loading']) {
+      const painted = painter.paint(modeStatus, 'open')
+      expect(
+        painted.map((radio) => radio.checked),
+        modeStatus,
+      ).toEqual([false, false, false])
+      expect(
+        painted.map((radio) => radio.disabled),
+        modeStatus,
+      ).toEqual([true, true, true])
+    }
+
+    // A settled 'ready' read is the only state that may select: the real mode
+    // is checked, every radio is editable, and switching stays enabled.
+    for (const mode of values) {
+      const ready = painter.paint('ready', mode)
+      expect(
+        ready.map((radio) => radio.checked),
+        mode,
+      ).toEqual(values.map((value) => value === mode))
+      expect(
+        ready.map((radio) => radio.disabled),
+        mode,
+      ).toEqual([false, false, false])
+      expect(painter.hint.textContent).toBe(
+        '注册页地址：/register；切换后立即生效。',
+      )
+    }
+
+    // ...and a failure after that ready paint drops the selection again
+    // instead of leaving the last known mode checked.
+    const relapsed = painter.paint('error')
+    expect(relapsed.map((radio) => radio.checked)).toEqual([
+      false,
+      false,
+      false,
+    ])
+    expect(painter.state.mode).toBe('open')
+  })
+
   it('routes every session exit through endSession()', () => {
     // 1. Logout button.
     const logout = section(
