@@ -790,7 +790,11 @@ const adminScript = `
     var radios = document.querySelectorAll('input[name="registrationMode"]')
     var ready = state.modeStatus === 'ready'
     for (var i = 0; i < radios.length; i++) {
-      radios[i].checked = radios[i].value === state.mode
+      // Only a settled 'ready' read may claim a selection. state.mode keeps the
+      // last known value across a failed read (so a later successful read can
+      // repaint it), but a checked — even disabled — radio reads as "this is
+      // the mode in effect", which is exactly what a stale value must not say.
+      radios[i].checked = ready && radios[i].value === state.mode
       radios[i].disabled = !ready
     }
     // Three distinct copies for three distinct situations: the ready copy, the
