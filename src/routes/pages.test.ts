@@ -1067,3 +1067,299 @@ describe('page markup safety', () => {
     expect(renderActivity).toContain('bars.hidden = true')
   })
 })
+
+describe('admin theme switch and brand assets', () => {
+  // Same slice helper as `page markup safety`, but local to this block: the
+  // existing describe is not touched, only appended to.
+  const between = (start: string, end: string): string => {
+    const from = adminPageHtml.indexOf(start)
+    expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+    const to = adminPageHtml.indexOf(end, from + start.length)
+    expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+    return adminPageHtml.slice(from, to)
+  }
+
+  it('serves /favicon.ico as a session-less static ICO', async () => {
+    // Unconfigured deployment: the panel route 404s there, but its own
+    // <link rel="icon"> must still resolve — an ICO leaks nothing.
+    const res = await app.request('/favicon.ico', {}, makeEnv())
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/x-icon')
+    expect(res.headers.get('cache-control')).toBe(
+      'public, max-age=604800, immutable',
+    )
+
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    // ICONDIR: reserved 0, type 1 (icon), image count 2.
+    expect(Array.from(bytes.slice(0, 4))).toEqual([0x00, 0x00, 0x01, 0x00])
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    expect(view.getUint16(4, true)).toBe(2)
+
+    // Both directory entries are PNG payloads (the ICO may embed PNG
+    // directly): 16x16 first, then 32x32, "0" meaning 256.
+    const sizes: number[] = []
+    for (let index = 0; index < 2; index++) {
+      const entry = 6 + index * 16
+      const width = view.getUint8(entry)
+      sizes.push(width === 0 ? 256 : width)
+      expect(view.getUint8(entry + 1)).toBe(width === 0 ? 0 : width)
+      expect(view.getUint16(entry + 4, true)).toBe(1)
+      expect(view.getUint16(entry + 6, true)).toBe(32)
+      const length = view.getUint32(entry + 8, true)
+      const offset = view.getUint32(entry + 12, true)
+      expect(offset + length).toBeLessThanOrEqual(bytes.length)
+      expect(Array.from(bytes.slice(offset, offset + 8))).toEqual([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ])
+    }
+    expect(sizes).toEqual([16, 32])
+    expect(bytes.length).toBeLessThanOrEqual(8 * 1024)
+
+    // The bytes are decoded once at module scope and reused: the route hands
+    // back the very same view, and a second request is byte-identical.
+    const { faviconIco } = await import('@/assets/favicon')
+    expect(Array.from(bytes)).toEqual(Array.from(faviconIco))
+    const again = await app.request('/favicon.ico', {}, makeEnv())
+    expect(new Uint8Array(await again.arrayBuffer())).toEqual(bytes)
+  })
+
+  it('links the favicon from both pages instead of the empty data: icon', () => {
+    for (const [name, html] of pages) {
+      expect(html, name).toContain(
+        '<link rel="icon" href="/favicon.ico" sizes="any">',
+      )
+      expect(html, name).not.toContain('href="data:,"')
+    }
+  })
+
+  it('inlines the brand logo to the left of the heading', () => {
+    const topbar = between('<header class="topbar">', '</header>')
+    expect(topbar).toContain('viewBox="0 0 447.942 447.943"')
+    expect(topbar).toContain('width="28" height="28"')
+    expect(topbar).toContain('aria-hidden="true"')
+    expect(topbar).toContain('focusable="false"')
+    // Both paths verbatim, with the source fills and no gradient.
+    expect(topbar).toContain('fill="#5ed698"')
+    expect(topbar).toContain('fill="#4daf7c"')
+    expect(topbar.match(/<path /g)).toHaveLength(2)
+    expect(topbar).not.toContain('gradient')
+    // Inside .brand, before the <h1>.
+    expect(topbar.indexOf('class="brand"')).toBeGreaterThan(-1)
+    expect(topbar.indexOf('viewBox=')).toBeGreaterThan(
+      topbar.indexOf('class="brand"'),
+    )
+    expect(topbar.indexOf('viewBox=')).toBeLessThan(topbar.indexOf('<h1>'))
+
+    expect(adminPageHtml).toContain(
+      '.brand { display: flex; align-items: center; gap: 10px; }',
+    )
+    expect(adminPageHtml).toContain('.brand svg { flex: none; }')
+  })
+
+  it('puts a three-state theme select in the session actions, left of 刷新', () => {
+    const actions = between(
+      'id="session-actions"',
+      '<button class="btn ghost" id="logout-btn"',
+    )
+    expect(actions).toContain('<select class="theme-select" id="theme-select"')
+    expect(actions).toContain('aria-label="主题"')
+    for (const option of [
+      '<option value="light">亮色</option>',
+      '<option value="dark">暗色</option>',
+      '<option value="auto">跟随系统</option>',
+    ]) {
+      expect(actions).toContain(option)
+    }
+    expect(actions.indexOf('id="theme-select"')).toBeLessThan(
+      actions.indexOf('id="refresh-btn"'),
+    )
+    // The control rides with #session-actions: it is hidden while logged out.
+    expect(actions).toContain('id="session-actions" hidden')
+    // It must not inherit the width: 100% of the generic select rule.
+    expect(adminPageHtml).toContain('.theme-select { width: auto; }')
+  })
+
+  it('drives the palette from [data-theme] instead of the media query', () => {
+    // The system-preference override has to go: with it in place, an explicit
+    // "亮色" choice would still be overridden on a dark system.
+    expect(adminPageHtml).not.toContain('@media (prefers-color-scheme: dark)')
+    const light = between(':root {', '[data-theme="dark"] {')
+    expect(light).toContain('color-scheme: light;')
+    expect(light).toContain('--bg: #f4f5f7;')
+    const dark = between('[data-theme="dark"] {', '\n}')
+    expect(dark).toContain('color-scheme: dark;')
+    expect(dark).toContain('--bg: #111418;')
+    expect(dark).toContain('--card: #1a1f26;')
+    expect(dark).toContain('--text: #e6e9ee;')
+    // The new control is painted from the same variables as every other input.
+    expect(between('input, select {', 'input:focus')).toContain(
+      'background: var(--card)',
+    )
+    expect(between('.theme-select', '}')).not.toContain('#')
+  })
+
+  it('resolves the first paint before the stylesheet loads', () => {
+    const head = between('<head>', '</head>')
+    expect(head).toContain('<link rel="icon" href="/favicon.ico" sizes="any">')
+    // Nothing recorded resolves to light, and the head cannot see the session
+    // at all (the cookie is HttpOnly), so it must never guess dark.
+    expect(head).toContain("var mode = 'light'")
+    expect(head).toContain("localStorage.getItem('lx-admin-theme')")
+    expect(head).toContain('matchMedia')
+    expect(head).toContain("root.setAttribute('data-theme', theme)")
+    expect(head).toContain("root.setAttribute('data-theme-mode', mode)")
+    expect(head).toContain('root.style.colorScheme = theme')
+    // A blocked storage (private mode) must not break the page.
+    expect(head).toContain('try {')
+    expect(head).toContain('} catch (err) {')
+    // The inline script is ahead of the stylesheet, not after it.
+    expect(head.indexOf('lx-admin-theme')).toBeLessThan(head.indexOf('<style>'))
+    expect(head.indexOf('<style>')).toBeGreaterThan(-1)
+  })
+
+  it('keeps the theme a session property: light when logged out, restored on login', () => {
+    const showLogin = between('function showLogin', 'function showPanel')
+    expect(showLogin).toContain("applyTheme('light')")
+    // …without discarding the stored choice, so the next login restores it.
+    expect(showLogin).not.toContain('removeItem')
+    expect(showLogin).not.toContain('storeThemeMode(')
+
+    const showPanel = between('function showPanel', 'async function loadUsers')
+    expect(showPanel).toContain("applyTheme(readThemeMode() || 'auto')")
+    expect(showPanel).toContain("$('session-actions').hidden = false")
+
+    // Logout and every 401 go through endSession(), which ends in showLogin().
+    const endSession = between('function endSession', 'function showLogin')
+    expect(endSession).toContain('resetData()')
+    expect(endSession).toContain('showLogin(message)')
+  })
+
+  it('persists the choice and repaints both modes from it', () => {
+    // The theme helpers are exercised against a fake document instead of being
+    // pinned by string matching: resolution, the <html> attributes and the
+    // storage guards are the behaviour, not the source line.
+    const source = between(
+      '// --- Theme (light / dark / auto)',
+      'function formatTime',
+    )
+    const build = (
+      options: { stored?: string; throws?: boolean; matches?: boolean } = {},
+    ) => {
+      const store = new Map<string, string>()
+      if (options.stored !== undefined)
+        store.set('lx-admin-theme', options.stored)
+      const storage = {
+        getItem: (key: string) => {
+          if (options.throws) throw new Error('denied')
+          return store.has(key) ? (store.get(key) as string) : null
+        },
+        setItem: (key: string, value: string) => {
+          if (options.throws) throw new Error('denied')
+          store.set(key, value)
+        },
+      }
+      const attributes: Record<string, string> = {}
+      const root = {
+        style: {} as { colorScheme?: string },
+        getAttribute: (name: string) => attributes[name] ?? null,
+        setAttribute: (name: string, value: string) => {
+          attributes[name] = value
+        },
+      }
+      const document = { documentElement: root }
+      const select = { value: '' }
+      const darkMedia = { matches: options.matches === true }
+      const api = new Function(
+        'document',
+        'localStorage',
+        '$',
+        'darkMediaValue',
+        'THEME_KEY',
+        `${source}
+  darkMedia = darkMediaValue
+  return {
+    readThemeMode: readThemeMode,
+    storeThemeMode: storeThemeMode,
+    systemTheme: systemTheme,
+    themeMode: themeMode,
+    applyTheme: applyTheme
+  }`,
+      )(document, storage, () => select, darkMedia, 'lx-admin-theme') as {
+        readThemeMode: () => string
+        storeThemeMode: (mode: string) => void
+        systemTheme: () => string
+        themeMode: () => string
+        applyTheme: (mode: string) => void
+      }
+      return { ...api, store, root, select }
+    }
+
+    // Nothing recorded yet: the panel starts on 'auto' (contract 3), which the
+    // head script could only have resolved to light.
+    const fresh = build()
+    expect(fresh.readThemeMode()).toBe('')
+    expect(fresh.systemTheme()).toBe('light')
+    fresh.applyTheme(fresh.readThemeMode() || 'auto')
+    expect(fresh.root.getAttribute('data-theme')).toBe('light')
+    expect(fresh.root.getAttribute('data-theme-mode')).toBe('auto')
+    expect(fresh.select.value).toBe('auto')
+
+    // Explicit light stays light even on a dark system, and dark goes dark.
+    for (const [mode, expected] of [
+      ['light', 'light'],
+      ['dark', 'dark'],
+    ] as const) {
+      const panel = build({ matches: true })
+      panel.applyTheme(mode)
+      expect(panel.root.getAttribute('data-theme'), mode).toBe(expected)
+      expect(panel.root.getAttribute('data-theme-mode'), mode).toBe(mode)
+      expect(panel.root.style.colorScheme, mode).toBe(expected)
+      expect(panel.select.value, mode).toBe(mode)
+    }
+
+    // 'auto' resolves both ways and only records itself as the mode.
+    const autoDark = build({ matches: true })
+    autoDark.applyTheme('auto')
+    expect(autoDark.root.getAttribute('data-theme')).toBe('dark')
+    expect(autoDark.root.getAttribute('data-theme-mode')).toBe('auto')
+
+    // The choice persists under the contract key, and is read back on reload.
+    const persisted = build()
+    persisted.applyTheme('dark')
+    persisted.storeThemeMode('dark')
+    expect(persisted.store.get('lx-admin-theme')).toBe('dark')
+    expect(build({ stored: 'dark' }).readThemeMode()).toBe('dark')
+    // An unknown stored value is ignored instead of being painted.
+    expect(build({ stored: 'sepia' }).readThemeMode()).toBe('')
+
+    // Blocked storage (private mode) must neither throw nor paint dark.
+    const blocked = build({ stored: 'dark', throws: true })
+    expect(blocked.readThemeMode()).toBe('')
+    expect(() => blocked.storeThemeMode('dark')).not.toThrow()
+    blocked.applyTheme(blocked.readThemeMode() || 'light')
+    expect(blocked.root.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('follows the OS appearance live while, and only while, the choice is auto', () => {
+    const watcher = between(
+      "// 'auto' follows the OS appearance live",
+      "window.addEventListener('hashchange'",
+    )
+    expect(watcher).toContain(
+      "window.matchMedia('(prefers-color-scheme: dark)')",
+    )
+    expect(watcher).toContain("darkMedia.addEventListener('change'")
+    // The listener is a no-op unless the user's choice is still 'auto': a
+    // system flip must never override an explicit light/dark pick.
+    expect(watcher).toContain("if (themeMode() !== 'auto') return")
+    expect(watcher).toContain("applyTheme('auto')")
+
+    // The select writes the choice and repaints in the same tick.
+    const select = between(
+      "$('theme-select').addEventListener",
+      "// 'auto' follows the OS appearance live",
+    )
+    expect(select).toContain('storeThemeMode(mode)')
+    expect(select).toContain('applyTheme(mode)')
+  })
+})

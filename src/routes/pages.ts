@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getAdminPasswordHash } from '@/admin/auth'
+import { faviconIco } from '@/assets/favicon'
 import { adminPageHtml } from '@/pages/admin'
 import { registerPageHtml } from '@/pages/register'
 
@@ -25,5 +26,16 @@ app.get('/admin', (c) => {
 })
 
 app.get('/register', (c) => c.html(registerPageHtml, 200, PAGE_HEADERS))
+
+// The favicon is a static asset (the two pages link it from their <head>), so
+// it needs no session and stays available even when the admin panel is not
+// configured: an ICO carries no information beyond the logo. The bytes are
+// decoded once in `@/assets/favicon` and reused for every request.
+app.get('/favicon.ico', (c) =>
+  c.body(faviconIco, 200, {
+    'content-type': 'image/x-icon',
+    'cache-control': 'public, max-age=604800, immutable',
+  }),
+)
 
 export default app
