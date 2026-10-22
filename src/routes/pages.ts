@@ -2,13 +2,16 @@ import { Hono } from 'hono'
 import { getAdminPasswordHash } from '@/admin/auth'
 import { faviconIco } from '@/assets/favicon'
 import { adminPageHtml } from '@/pages/admin'
+import { homePageHtml } from '@/pages/home'
 import { registerPageHtml } from '@/pages/register'
+import { getSettings } from '@/registry/client'
 
 const app = new Hono<{ Bindings: LX.Env }>()
 
-// Both pages are self-contained documents: no external scripts, styles, fonts
-// or images. The CSP pins them to same-origin API calls only, and the pages
-// must never be cached (the admin page carries session-gated UI state).
+// All three pages are self-contained documents: no external scripts, styles,
+// fonts or images. The CSP pins them to same-origin API calls only, and the
+// pages must never be cached (the admin page carries session-gated UI state,
+// and the landing page reflects the live registration mode).
 const PAGE_HEADERS = {
   'cache-control': 'no-store',
   'content-security-policy':
@@ -17,6 +20,22 @@ const PAGE_HEADERS = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
 }
+
+// The landing page `/` renders the registration entry only when self-service
+// registration is available. The mode is read from the same registry settings
+// `GET /api/registration-info` reports, while rendering, so `closed` never
+// links to /register and the page needs no script to be correct.
+app.get('/', async (c) => {
+  // The landing page must never 500 because the registry is unreachable: an
+  // unreadable mode renders the page without a registration entry.
+  let mode: LX.RegistrationMode | null = null
+  try {
+    mode = (await getSettings(c.env)).registrationMode
+  } catch {
+    mode = null
+  }
+  return c.html(homePageHtml(mode), 200, PAGE_HEADERS)
+})
 
 app.get('/admin', (c) => {
   // Match `/api/admin/*`: an unconfigured (or malformed) admin hash hides the

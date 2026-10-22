@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import rootApp from '@/index'
 import { adminPageHtml } from '@/pages/admin'
+import { homePageHtml } from '@/pages/home'
 import { registerPageHtml } from '@/pages/register'
+import { updateSettings } from '@/registry/client'
+import { createTestEnv } from '@/test/registryEnv'
 import app from './pages'
 
 const ADMIN_HASH = 'a'.repeat(64)
@@ -39,9 +43,131 @@ describe('page routes', () => {
   })
 })
 
+describe('landing page', () => {
+  // Every read goes through the real registry DO fixture, so the assertions are
+  // on what a browser gets for a given registration setting.
+  const renderHome = async (mode?: LX.RegistrationMode) => {
+    const { env } = await createTestEnv()
+    if (mode) await updateSettings(env, mode)
+    const res = await app.request('/', {}, env)
+    return { res, html: await res.text() }
+  }
+
+  it('serves `/` as a self-contained landing page instead of 404', async () => {
+    const { res, html } = await renderHome('open')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    // The landing page reflects the live registration mode, so it is not cached.
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(html).toContain('<title>LX Music Server · 同步服务</title>')
+    expect(html).toContain('<h1>LX Music server</h1>')
+    expect(html).toContain('一个兼容官方同步协议的重构版')
+    // Nothing to fetch and nothing to execute: the page is correct as served.
+    expect(html).not.toContain('<script')
+    expect(html).toContain('<link rel="icon" href="/favicon.ico" sizes="any">')
+
+    // The document policy is the one the other pages ship: no widening for `/`.
+    const admin = await app.request('/admin', {}, makeEnv(ADMIN_HASH))
+    expect(res.headers.get('content-security-policy')).toBe(
+      admin.headers.get('content-security-policy'),
+    )
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(res.headers.get('x-frame-options')).toBe('DENY')
+    expect(res.headers.get('referrer-policy')).toBe('no-referrer')
+  })
+
+  it('shows the register entry in open and approval mode', async () => {
+    for (const mode of ['open', 'approval'] as const) {
+      const { html } = await renderHome(mode)
+      expect(html, mode).toContain('id="register-link" href="/register"')
+      expect(html, mode).toContain('注册账号')
+      // No closed/failure copy in an open mode.
+      expect(html, mode).not.toContain('当前未开放自助注册')
+      expect(html, mode).not.toContain('暂时无法读取注册状态')
+    }
+
+    // The two open modes still explain what a registration leads to.
+    expect((await renderHome('open')).html).toContain(
+      '注册成功即可在 LX Music 客户端连接本服务器',
+    )
+    expect((await renderHome('approval')).html).toContain(
+      '提交后需管理员批准才能连接',
+    )
+  })
+
+  it('hides the register entry entirely when registration is closed', async () => {
+    const { html } = await renderHome('closed')
+    // Not merely hidden: the link is absent from the document, so it cannot be
+    // reached from the landing page (or indexed/revealed by a stylesheet).
+    expect(html).not.toContain('/register')
+    expect(html).not.toContain('注册账号')
+    expect(html).toContain('id="register-closed"')
+    expect(html).toContain('当前未开放自助注册')
+    // ...while the admin entry stays.
+    expect(html).toContain('id="admin-link" href="/admin"')
+  })
+
+  it('keeps the admin entry available in every mode', async () => {
+    for (const mode of ['open', 'approval', 'closed'] as const) {
+      const { html } = await renderHome(mode)
+      expect(html, mode).toContain(
+        '<a class="btn primary" id="admin-link" href="/admin">进入管理面板</a>',
+      )
+    }
+  })
+
+  it('still answers 200 without a registration entry when the mode cannot be read', async () => {
+    // No USER_REGISTRY binding at all: the settings read throws. A landing page
+    // must not 500 (or advertise registration) because the registry is down.
+    const res = await app.request('/', {}, makeEnv())
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toBe(homePageHtml(null))
+    expect(html).not.toContain('/register')
+    expect(html).toContain('id="register-unknown"')
+    expect(html).toContain('暂时无法读取注册状态')
+    expect(html).toContain('id="admin-link" href="/admin"')
+  })
+
+  it('keeps every neighbouring route untouched', async () => {
+    // `/` used to fall through the composed app to a 404; the mounted router is
+    // what a browser hits, so the mount itself is checked here.
+    const { env } = await createTestEnv()
+    const res = await rootApp.request('/', {}, env)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('id="admin-link" href="/admin"')
+
+    expect((await rootApp.request('/hello', {}, env)).status).toBe(200)
+    expect((await rootApp.request('/register', {}, env)).status).toBe(200)
+    expect((await rootApp.request('/favicon.ico', {}, env)).status).toBe(200)
+    // An unconfigured deployment still hides the admin panel.
+    expect((await rootApp.request('/admin', {}, env)).status).toBe(404)
+  })
+
+  it('follows the live registration setting on every request', async () => {
+    // Rendered per request from the same settings `/api/registration-info`
+    // reports, so a mode switch takes effect on the next load with no cache to
+    // purge. `createTestEnv()` starts on the default `approval`.
+    const { env } = await createTestEnv()
+    const html = async () => (await app.request('/', {}, env)).text()
+
+    expect(await html()).toContain('href="/register"')
+    await updateSettings(env, 'closed')
+    expect(await html()).not.toContain('/register')
+    await updateSettings(env, 'open')
+    expect(await html()).toContain('href="/register"')
+  })
+})
+
+// Every branch of the landing page is checked by the markup safety rules below,
+// not only the state the unit test happens to construct.
 const pages: Array<[string, string]> = [
   ['admin', adminPageHtml],
   ['register', registerPageHtml],
+  ['home (registration open)', homePageHtml('open')],
+  ['home (registration approval)', homePageHtml('approval')],
+  ['home (registration closed)', homePageHtml('closed')],
+  ['home (registration mode unknown)', homePageHtml(null)],
 ]
 
 // Markup that makes the browser fetch something from another origin. A plain
