@@ -2,73 +2,41 @@
 // worker itself: the project ships no static-asset pipeline, and both pages
 // are self-contained documents with no external files.
 //
-// The icon is the LX Music logo (https://lxmusic.toside.cn/img/logo.svg):
-// its two `<path>` shapes were rendered to PNG with `qlmanage`, resized to
-// 16x16 and 32x32 with `sips`, and packed into an ICO container that embeds
-// the PNG payloads directly (no BMP/DIB conversion). 3228 bytes in total,
-// 2 frames, RGBA.
+// The icon is the official LX Music app icon, taken from the favicon the
+// project site publishes for itself (a single 32x32 frame).  Its 32x32 bitmap
+// is reproduced here pixel for pixel, and a 16x16 frame is derived from it by
+// a box-filter downscale so small tab icons stay legible; both frames are
+// stored as PNG payloads (the ICO container allows that) to keep the file
+// small.  1334 bytes in total, 2 frames, RGBA.
 //
 // Decoded once at module scope: the bytes never change, so every request
 // reuses the same view instead of paying for an atob per hit.
 
 const FAVICON_ICO_BASE64 = [
-  'AAABAAIAEBAAAAEAIADABAAAJgAAACAgAAABACAAtgcAAOYEAACJUE5HDQoaCgAAAA1JSERSAAAA',
-  'EAAAABAIBgAAAB/z/2EAAAAEZ0FNQQAAsY8L/GEFAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1',
-  'MAAA6mAAADqYAAAXcJy6UTwAAABEZVhJZk1NACoAAAAIAAGHaQAEAAAAAQAAABoAAAAAAAOgAQAD',
-  'AAAAAQABAACgAgAEAAAAAQAAABCgAwAEAAAAAQAAABAAAAAANFVx8gAAAZ1pVFh0WE1MOmNvbS5h',
-  'ZG9iZS54bXAAAAAAADx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9',
-  'IlhNUCBDb3JlIDYuMC4wIj4KICAgPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9y',
-  'Zy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4KICAgICAgPHJkZjpEZXNjcmlwdGlvbiByZGY6',
-  'YWJvdXQ9IiIKICAgICAgICAgICAgeG1sbnM6ZXhpZj0iaHR0cDovL25zLmFkb2JlLmNvbS9leGlm',
-  'LzEuMC8iPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MjU2PC9leGlmOlBpeGVsWERp',
-  'bWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjI1NjwvZXhpZjpQaXhlbFlE',
-  'aW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBt',
-  'ZXRhPgpesB4bAAACUklEQVQ4EX2TS09TURDH//fR2zak5dFKwfhoDVQjpDFYN6gLFgZYKDvjSiXh',
-  'K7g0cW/iFzB+AhcujLjRaEzcoZGWahBME4oVwVL69ra99zoz2JuSVE/S07nnzPzOnP/MURwa6DHe',
-  'l75itbqFy/1xnPKFMKj39fAClF4Ai5j3s0/xrbELXVER1P0Y80cElgzEaE1zYbprdRkOHDDEQ44a',
-  'AaqWiZVKVn5n/aO4M3oVMd8xiVC74o6Yyt8vy7HRdixoUGEoOtYbP/Bw6wVy5v7/AbzLwVE6aTo4',
-  'LjrYlBmnX2hV8bKwKoCeV5AdmvjkS8EYFsIXxf5Eoj7Jv0XRtvCrVRG3f16Bd23KoEUQHnwyCzgX',
-  'SsC0W5IRr/cEsPJc24h3AHHfCA7MKirNBvvjuDEoVZkZOC/fbhlrpPSrYgbr9byIlal/x0JoCqmN',
-  'z0jtZ+kkBfeSN7FjNNCy2rgRnhKAaMBlepRbxlptW1LtlFF3FGyW8iibdUk7W/6JxMk4Yt6wBPMk',
-  'gNfFNQn2q4ZsKHRarG8YI3QFla6jKor0g6HpGPMNu8FsiAZfanm3u1i0C4HTuKaP483GCkrNGhQC',
-  'eFQd77ZTeJxeJj3qLkQAHlUj0Q6fBDdMzizA9ihI72VRJmfOiLP4uLtJIA1+3XsUkAycoZIdIthx',
-  'xzzA82oaS8nriAYi+N1uknAWlibncXdiFjpBOkMyuEIvbm4oQZ1nUcNwv0Eghs+LB9O3MRGOYnFy',
-  'FrfOzXTi3H+3jLySoSo82/uAiNGPeWqYE94hcWRg523IQtf0BwBz6WiZkMuJAAAAAElFTkSuQmCC',
-  'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAACBjSFJN',
-  'AAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kA',
-  'BAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAgoAMABAAAAAEAAAAgAAAAAKyG',
-  'YvMAAAGdaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2Jl',
-  'Om5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJk',
-  'Zj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxy',
-  'ZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6',
-  'Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6UGl4ZWxYRGltZW5zaW9u',
-  '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',
+  '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',
+  'Bf4BMM4NOnBLYE8AAAAASUVORK5CYII=',
 ].join('')
 
 export const faviconIco: Uint8Array<ArrayBuffer> = Uint8Array.from(
