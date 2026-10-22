@@ -36,8 +36,8 @@ jobs:
           #   简单模式: user1:password1,user2:password2
           #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           #   JSON 模式也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
-          # LX_ADMIN_PASSWORD_HASH secret 格式（可选）:
-          #   管理员密码的 SHA-256（64 位 hex）。未配置时 /admin 与 /api/admin/* 全部 404。
+          # LX_ADMIN_PASSWORD_HASH secret 格式（必填，缺失则部署失败）:
+          #   管理员密码的 SHA-256（64 位小写 hex）。
           #   注意：从 GitHub Secrets 删除它不会移除 Worker 上已有的 secret，
           #   停用面板还需手动执行 `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。
           python3 - <<'EOF'
@@ -91,12 +91,17 @@ jobs:
 
           secrets = {"LX_USERS": json.dumps(users)}
 
+          # LX_ADMIN_PASSWORD_HASH is required: the admin panel is part of the
+          # deployed surface, so a deployment without it is not a valid release.
+          # Fail loudly instead of silently shipping with /admin disabled.
           admin_hash = os.environ.get("LX_ADMIN_PASSWORD_HASH", "").strip().lower()
-          if admin_hash:
-              if not re.fullmatch(r"[0-9a-f]{64}", admin_hash):
-                  print("::error:: LX_ADMIN_PASSWORD_HASH must be a 64-character hex SHA-256 digest", file=sys.stderr)
-                  sys.exit(1)
-              secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
+          if not admin_hash:
+              print("::error:: LX_ADMIN_PASSWORD_HASH is required: set the repository secret to the 64-character hex SHA-256 digest of the admin password", file=sys.stderr)
+              sys.exit(1)
+          if not re.fullmatch(r"[0-9a-f]{64}", admin_hash):
+              print("::error:: LX_ADMIN_PASSWORD_HASH must be a 64-character hex SHA-256 digest", file=sys.stderr)
+              sys.exit(1)
+          secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
 
           with open('.secrets.json', 'w') as f:
               json.dump(secrets, f)
