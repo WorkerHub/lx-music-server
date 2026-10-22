@@ -1481,27 +1481,32 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     expect(adminPageHtml).toContain('<title>管理面板 · LX Music Server</title>')
   })
 
-  it('gives the user table its own layout so the action column hugs the right edge', () => {
+  it('gives the user table proportional column widths with the name column bounded', () => {
+    // 用户表专属样式块：从注释头到 .badge 规则之前。
+    const usersTableCss = adminPageHtml.slice(
+      adminPageHtml.indexOf('/* 用户表专属布局'),
+      adminPageHtml.indexOf('.badge {'),
+    )
     expect(adminPageHtml).toContain('<table class="users-table">')
-    expect(adminPageHtml).toContain(
+    expect(usersTableCss).toContain(
       '.users-table { table-layout: auto; width: 100%; }',
     )
-    expect(adminPageHtml).toContain(
+    expect(usersTableCss).toContain(
       '.users-table th, .users-table td { white-space: nowrap; }',
     )
-    expect(adminPageHtml).toContain(
-      '.users-table th:first-child, .users-table td:first-child { width: 100%; }',
+    // 用户名不再宽 100%，改成有限比例 + 允许换行。
+    expect(usersTableCss).toContain(
+      '.users-table th:first-child, .users-table td:first-child { width: 18%; min-width: 160px; white-space: normal; }',
     )
-    expect(adminPageHtml).toContain(
-      '.users-table th.actions-col, .users-table td.actions-col { text-align: right; }',
+    expect(usersTableCss).not.toContain('td:first-child { width: 100%; }')
+    // 操作列按钮组贴左，按钮仍保持单行（宽屏一行排开，窄屏靠横向滚动容器）。
+    expect(usersTableCss).toContain(
+      '.users-table .row-actions { justify-content: flex-start; flex-wrap: nowrap; }',
     )
-    expect(adminPageHtml).toContain(
-      '.users-table .row-actions { justify-content: flex-end; flex-wrap: nowrap; }',
-    )
-    // 数字列与表头同步右对齐。
-    expect(adminPageHtml).toContain(
-      '.users-table th:nth-child(5), .users-table td:nth-child(5),\n.users-table th:nth-child(6), .users-table td:nth-child(6) { text-align: right; }',
-    )
+    expect(usersTableCss).not.toContain('justify-content: flex-end')
+    // 7 列表头与内容均左对齐：用户表块内不再有右对齐规则。
+    expect(usersTableCss).not.toContain('text-align: right')
+    expect(usersTableCss).not.toContain('actions-col')
     // 内边距不变，横向滚动容器保留。
     expect(adminPageHtml).toContain(
       'th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }',

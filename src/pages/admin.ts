@@ -140,15 +140,13 @@ tbody tr:last-child td { border-bottom: none; }
 .name-cell { font-weight: 600; word-break: break-all; }
 .actions-col { white-space: nowrap; }
 .row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
-/* 用户表专属布局：操作列贴右、列宽按内容自适应、富余宽度归第一列。
+/* 用户表专属布局：7 列全部左对齐；用户名列宽收缩到 18%，长用户名换行，富余宽度交给其余列。
    全部选择器都限定在 .users-table 内，残留数据表与弹窗按钮布局不受影响。 */
 .users-table { table-layout: auto; width: 100%; }
 .users-table th, .users-table td { white-space: nowrap; }
-.users-table th:first-child, .users-table td:first-child { width: 100%; }
-.users-table th.actions-col, .users-table td.actions-col { text-align: right; }
-.users-table .row-actions { justify-content: flex-end; flex-wrap: nowrap; }
-.users-table th:nth-child(5), .users-table td:nth-child(5),
-.users-table th:nth-child(6), .users-table td:nth-child(6) { text-align: right; }
+/* 用户名不再 width: 100% 吃满富余宽度：固定 18%、最小 160px，长名字换行而不是把表格撑宽。 */
+.users-table th:first-child, .users-table td:first-child { width: 18%; min-width: 160px; white-space: normal; }
+.users-table .row-actions { justify-content: flex-start; flex-wrap: nowrap; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); }
 .badge.ok { background: var(--ok-bg); color: var(--ok-text); }
 .badge.warn { background: var(--warn-bg); color: var(--warn-text); }
