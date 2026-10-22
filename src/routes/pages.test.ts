@@ -1133,15 +1133,18 @@ describe('admin theme switch and brand assets', () => {
 
   it('inlines the brand logo to the left of the heading', () => {
     const topbar = between('<header class="topbar">', '</header>')
-    expect(topbar).toContain('viewBox="0 0 447.942 447.943"')
-    expect(topbar).toContain('width="28" height="28"')
-    expect(topbar).toContain('aria-hidden="true"')
-    expect(topbar).toContain('focusable="false"')
+    // The brand svg only: the theme icons in the same topbar are counted in
+    // their own test, so this slice stops where the logo does.
+    const brand = between('<div class="brand">', '</div>')
+    expect(brand).toContain('viewBox="0 0 447.942 447.943"')
+    expect(brand).toContain('width="28" height="28"')
+    expect(brand).toContain('aria-hidden="true"')
+    expect(brand).toContain('focusable="false"')
     // Both paths verbatim, with the source fills and no gradient.
-    expect(topbar).toContain('fill="#5ed698"')
-    expect(topbar).toContain('fill="#4daf7c"')
-    expect(topbar.match(/<path /g)).toHaveLength(2)
-    expect(topbar).not.toContain('gradient')
+    expect(brand).toContain('fill="#5ed698"')
+    expect(brand).toContain('fill="#4daf7c"')
+    expect(brand.match(/<path /g)).toHaveLength(2)
+    expect(brand).not.toContain('gradient')
     // Inside .brand, before the <h1>.
     expect(topbar.indexOf('class="brand"')).toBeGreaterThan(-1)
     expect(topbar.indexOf('viewBox=')).toBeGreaterThan(
@@ -1150,32 +1153,86 @@ describe('admin theme switch and brand assets', () => {
     expect(topbar.indexOf('viewBox=')).toBeLessThan(topbar.indexOf('<h1>'))
 
     expect(adminPageHtml).toContain(
-      '.brand { display: flex; align-items: center; gap: 10px; }',
+      '.brand { --brand-logo-size: 28px; display: flex; align-items: flex-start; gap: 10px; }',
     )
     expect(adminPageHtml).toContain('.brand svg { flex: none; }')
+    // Logo 的垂直中线对齐 h1 大标题的中线，而不是「标题+副标题」整块：
+    // .brand 顶端对齐 + h1 行盒与 logo 等高 → 两条中线重合，副标题排在 h1
+    // 之下、不参与 logo 定位。
+    expect(adminPageHtml).toContain(
+      '.brand h1 { line-height: var(--brand-logo-size); }',
+    )
+    expect(adminPageHtml).not.toContain(
+      '.brand { display: flex; align-items: center;',
+    )
   })
 
-  it('puts a three-state theme select in the session actions, left of 刷新', () => {
+  it('puts a three-state theme switch in the session actions, left of 刷新', () => {
     const actions = between(
       'id="session-actions"',
       '<button class="btn ghost" id="logout-btn"',
     )
-    expect(actions).toContain('<select class="theme-select" id="theme-select"')
-    expect(actions).toContain('aria-label="主题"')
-    for (const option of [
-      '<option value="light">亮色</option>',
-      '<option value="dark">暗色</option>',
-      '<option value="auto">跟随系统</option>',
-    ]) {
-      expect(actions).toContain(option)
+    // 一个三段式图标按钮组，不再是文字下拉。
+    expect(actions).toContain(
+      '<div class="theme-switch" id="theme-switch" role="group" aria-label="主题">',
+    )
+    expect(adminPageHtml).not.toContain('theme-select')
+    expect(actions).not.toContain('<select')
+    expect(actions).not.toContain('<option')
+    for (const [mode, label] of [
+      ['light', '亮色'],
+      ['dark', '暗色'],
+      ['auto', '跟随系统'],
+    ] as const) {
+      // 每个状态一个按钮：模式、初始 aria-pressed=false、可读标签 + title。
+      expect(actions).toContain(
+        `data-theme-mode="${mode}" aria-pressed="false" aria-label="${label}" title="${label}"`,
+      )
     }
-    expect(actions.indexOf('id="theme-select"')).toBeLessThan(
+
+    // 图标全部内联且用 currentColor 着色：暗色主题下自动反色，不引外链、
+    // 不写死 fill，CSP 无需放宽。
+    const switchMarkup = between('<div class="theme-switch"', '</div>')
+    expect(switchMarkup.match(/<svg /g)).toHaveLength(3)
+    expect(switchMarkup.match(/width="16" height="16"/g)).toHaveLength(3)
+    for (const icon of switchMarkup.split('<svg ').slice(1)) {
+      expect(icon).toContain('fill="none"')
+      expect(icon).toContain('stroke="currentColor"')
+      expect(icon).toContain('aria-hidden="true"')
+      expect(icon).toContain('focusable="false"')
+      expect(icon).not.toMatch(/fill="#/)
+      expect(icon).not.toContain('http')
+    }
+    expect(switchMarkup).not.toContain('<img')
+    expect(switchMarkup).not.toContain('href=')
+    // 三个不同的字形：太阳（圆 + 光线）、月亮、显示器。
+    expect(switchMarkup).toContain('<circle cx="12" cy="12" r="4" />')
+    expect(switchMarkup).toContain('M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z')
+    expect(switchMarkup).toContain(
+      '<rect x="2" y="3" width="20" height="14" rx="2" />',
+    )
+
+    // 位置不变：#session-actions 内、刷新按钮左边。
+    expect(actions.indexOf('id="theme-switch"')).toBeLessThan(
       actions.indexOf('id="refresh-btn"'),
     )
     // The control rides with #session-actions: it is hidden while logged out.
     expect(actions).toContain('id="session-actions" hidden')
-    // It must not inherit the width: 100% of the generic select rule.
-    expect(adminPageHtml).toContain('.theme-select { width: auto; }')
+
+    // 高亮态用主题变量（不写死颜色），亮/暗两套调色板各自提供它的底色。
+    expect(between(':root {', '[data-theme="dark"] {')).toContain(
+      '--primary-soft:',
+    )
+    expect(between('[data-theme="dark"] {', '\n}')).toContain('--primary-soft:')
+    const pressed = between('.theme-btn[aria-pressed="true"] {', '\n}')
+    expect(pressed).toContain('color: var(--primary)')
+    expect(pressed).toContain('background: var(--primary-soft)')
+    expect(pressed).toContain('border-color: var(--primary)')
+    expect(pressed).not.toContain('#')
+    // 未选中态是灰字，两个主题下都从 --muted 取色。
+    expect(between('.theme-btn {', '\n}')).toContain('color: var(--muted)')
+    // 图标不被全局 svg 规则撑开。
+    expect(adminPageHtml).toContain('.theme-btn svg { display: block; }')
   })
 
   it('drives the palette from [data-theme] instead of the media query', () => {
@@ -1194,7 +1251,10 @@ describe('admin theme switch and brand assets', () => {
     expect(between('input, select {', 'input:focus')).toContain(
       'background: var(--card)',
     )
-    expect(between('.theme-select', '}')).not.toContain('#')
+    expect(between('.theme-switch {', '\n}')).toContain(
+      'background: var(--card)',
+    )
+    expect(between('.theme-switch {', '\n}')).not.toContain('#')
   })
 
   it('resolves the first paint before the stylesheet loads', () => {
@@ -1265,8 +1325,30 @@ describe('admin theme switch and brand assets', () => {
           attributes[name] = value
         },
       }
-      const document = { documentElement: root }
-      const select = { value: '' }
+      // The panel paints the pressed state through exactly this selector, so
+      // the fake asserts the query instead of accepting any selector.
+      const buttons = ['light', 'dark', 'auto'].map((mode) => {
+        const button = {
+          mode,
+          pressed: '',
+          getAttribute(name: string) {
+            if (name === 'data-theme-mode') return mode
+            if (name === 'aria-pressed') return button.pressed || null
+            return null
+          },
+          setAttribute(name: string, value: string) {
+            if (name === 'aria-pressed') button.pressed = value
+          },
+        }
+        return button
+      })
+      const document = {
+        documentElement: root,
+        querySelectorAll: (selector: string) => {
+          expect(selector).toBe('#theme-switch [data-theme-mode]')
+          return buttons
+        },
+      }
       const darkMedia = { matches: options.matches === true }
       const api = new Function(
         'document',
@@ -1283,15 +1365,20 @@ describe('admin theme switch and brand assets', () => {
     themeMode: themeMode,
     applyTheme: applyTheme
   }`,
-      )(document, storage, () => select, darkMedia, 'lx-admin-theme') as {
+      )(document, storage, () => null, darkMedia, 'lx-admin-theme') as {
         readThemeMode: () => string
         storeThemeMode: (mode: string) => void
         systemTheme: () => string
         themeMode: () => string
         applyTheme: (mode: string) => void
       }
-      return { ...api, store, root, select }
+      return { ...api, store, root, buttons }
     }
+
+    // The highlight is read back from aria-pressed, exactly what assistive
+    // tech and the stylesheet see — never a private "active" flag.
+    const pressed = (list: { mode: string; pressed: string }[]) =>
+      list.filter((item) => item.pressed === 'true').map((item) => item.mode)
 
     // Nothing recorded yet: the panel starts on 'auto' (contract 3), which the
     // head script could only have resolved to light.
@@ -1301,7 +1388,7 @@ describe('admin theme switch and brand assets', () => {
     fresh.applyTheme(fresh.readThemeMode() || 'auto')
     expect(fresh.root.getAttribute('data-theme')).toBe('light')
     expect(fresh.root.getAttribute('data-theme-mode')).toBe('auto')
-    expect(fresh.select.value).toBe('auto')
+    expect(pressed(fresh.buttons)).toEqual(['auto'])
 
     // Explicit light stays light even on a dark system, and dark goes dark.
     for (const [mode, expected] of [
@@ -1313,7 +1400,7 @@ describe('admin theme switch and brand assets', () => {
       expect(panel.root.getAttribute('data-theme'), mode).toBe(expected)
       expect(panel.root.getAttribute('data-theme-mode'), mode).toBe(mode)
       expect(panel.root.style.colorScheme, mode).toBe(expected)
-      expect(panel.select.value, mode).toBe(mode)
+      expect(pressed(panel.buttons), mode).toEqual([mode])
     }
 
     // 'auto' resolves both ways and only records itself as the mode.
@@ -1321,6 +1408,7 @@ describe('admin theme switch and brand assets', () => {
     autoDark.applyTheme('auto')
     expect(autoDark.root.getAttribute('data-theme')).toBe('dark')
     expect(autoDark.root.getAttribute('data-theme-mode')).toBe('auto')
+    expect(pressed(autoDark.buttons)).toEqual(['auto'])
 
     // The choice persists under the contract key, and is read back on reload.
     const persisted = build()
@@ -1337,6 +1425,7 @@ describe('admin theme switch and brand assets', () => {
     expect(() => blocked.storeThemeMode('dark')).not.toThrow()
     blocked.applyTheme(blocked.readThemeMode() || 'light')
     expect(blocked.root.getAttribute('data-theme')).toBe('light')
+    expect(pressed(blocked.buttons)).toEqual(['light'])
   })
 
   it('follows the OS appearance live while, and only while, the choice is auto', () => {
@@ -1353,13 +1442,22 @@ describe('admin theme switch and brand assets', () => {
     expect(watcher).toContain("if (themeMode() !== 'auto') return")
     expect(watcher).toContain("applyTheme('auto')")
 
-    // The select writes the choice and repaints in the same tick.
-    const select = between(
-      "$('theme-select').addEventListener",
+    // The three buttons write the choice and repaint in the same tick, whether
+    // the hit landed on the button or on the icon inside it.
+    const click = between(
+      "var themeSwitch = $('theme-switch')",
       "// 'auto' follows the OS appearance live",
     )
-    expect(select).toContain('storeThemeMode(mode)')
-    expect(select).toContain('applyTheme(mode)')
+    expect(click).toContain("node.getAttribute('data-theme-mode')")
+    expect(click).toContain('node = node.parentNode')
+    expect(click).toContain('storeThemeMode(mode)')
+    expect(click).toContain('applyTheme(mode)')
+    // The mode is validated before it is stored or painted.
+    expect(click).toContain(
+      "if (mode !== 'light' && mode !== 'dark' && mode !== 'auto') mode = 'light'",
+    )
+    // No dead <select> wiring left behind.
+    expect(adminPageHtml).not.toContain("$('theme-select')")
   })
 })
 
