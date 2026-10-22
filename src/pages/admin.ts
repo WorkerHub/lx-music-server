@@ -19,6 +19,7 @@ const adminStyles = `
   --line: #e3e6ea;
   --primary: #2563eb;
   --primary-text: #ffffff;
+  --primary-soft: rgba(37, 99, 235, 0.12);
   --danger: #d92d20;
   --ok-bg: #ecfdf3;
   --ok-text: #067647;
@@ -36,6 +37,7 @@ const adminStyles = `
   --muted: #98a2b3;
   --line: #2b323c;
   --primary: #3b82f6;
+  --primary-soft: rgba(59, 130, 246, 0.22);
   --ok-bg: #0d2a1d;
   --ok-text: #75e0a7;
   --warn-bg: #2e2410;
@@ -59,9 +61,31 @@ body.modal-open { overflow: hidden; }
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .topbar h1 { font-size: 20px; margin: 0 0 4px; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
-.brand { display: flex; align-items: center; gap: 10px; }
+/* 品牌块：logo 的垂直中线对齐 h1 大标题的中线，而不是「标题+副标题」整块。
+   做法：h1 的行盒与 logo 等高（--brand-logo-size）后两者顶端对齐，两条中线
+   自然重合；副标题排在 h1 之下，不参与 logo 定位。 */
+.brand { --brand-logo-size: 28px; display: flex; align-items: flex-start; gap: 10px; }
 .brand svg { flex: none; }
-.theme-select { width: auto; }
+.brand h1 { line-height: var(--brand-logo-size); }
+/* 主题切换：三段式图标按钮组。图标用 currentColor 着色，亮/暗两套主题下
+   都直接跟随文字色，因此不需要第二套图标配色。 */
+.theme-switch {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card);
+}
+.theme-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 24px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.theme-btn:hover { color: var(--text); border-color: var(--line); }
+.theme-btn[aria-pressed="true"] {
+  color: var(--primary); background: var(--primary-soft); border-color: var(--primary);
+}
+.theme-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.theme-btn svg { display: block; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .tab {
   border: none; background: transparent; color: var(--muted); font: inherit;
@@ -316,7 +340,8 @@ const adminScript = `
   // light/dark before it lands there, so the stylesheet only needs
   // [data-theme="dark"]), while data-theme-mode keeps the choice itself. The
   // panel has no build step and no framework, so the document element is the
-  // single source of truth for every painter.
+  // single source of truth for every painter — the three icon buttons only
+  // mirror it back as aria-pressed.
   var darkMedia = null
 
   function readThemeMode() {
@@ -348,14 +373,24 @@ const adminScript = `
     return 'light'
   }
 
+  // aria-pressed is both the visual state (highlighted border/fill) and the
+  // accessible one, so the highlight can never disagree with data-theme-mode:
+  // one writer, no separate "active" class to keep in sync.
+  function syncThemeButtons(mode) {
+    var buttons = document.querySelectorAll('#theme-switch [data-theme-mode]')
+    for (var i = 0; i < buttons.length; i++) {
+      var pressed = buttons[i].getAttribute('data-theme-mode') === mode
+      buttons[i].setAttribute('aria-pressed', pressed ? 'true' : 'false')
+    }
+  }
+
   function applyTheme(mode) {
     var resolved = mode === 'auto' ? systemTheme() : mode
     var root = document.documentElement
     root.setAttribute('data-theme', resolved)
     root.setAttribute('data-theme-mode', mode)
     root.style.colorScheme = resolved
-    var select = $('theme-select')
-    if (select && select.value !== mode) select.value = mode
+    syncThemeButtons(mode)
   }
 
   function formatTime(value) {
@@ -1796,15 +1831,25 @@ const adminScript = `
       bindTab(TAB_ORDER[t])
     }
 
-    $('theme-select').addEventListener('change', function () {
-      var mode = this.value
+    // The segmented control is one click handler on the group: the event
+    // target is the pressed button, or the icon/path inside it, so walk up to
+    // the element that owns the mode.
+    var themeSwitch = $('theme-switch')
+    themeSwitch.addEventListener('click', function (event) {
+      var node = event.target
+      while (node && node !== themeSwitch) {
+        if (node.getAttribute && node.getAttribute('data-theme-mode')) break
+        node = node.parentNode
+      }
+      if (!node || node === themeSwitch) return
+      var mode = node.getAttribute('data-theme-mode')
       if (mode !== 'light' && mode !== 'dark' && mode !== 'auto') mode = 'light'
       storeThemeMode(mode)
       applyTheme(mode)
     })
 
     // 'auto' follows the OS appearance live, without a reload. matchMedia is
-    // missing on a few old browsers: the select still works there, only the
+    // missing on a few old browsers: the buttons still work there, only the
     // live follow is skipped.
     if (window.matchMedia) {
       darkMedia = window.matchMedia('(prefers-color-scheme: dark)')
@@ -1909,11 +1954,33 @@ ${adminStyles}
       </div>
     </div>
     <div class="topbar-actions" id="session-actions" hidden>
-      <select class="theme-select" id="theme-select" aria-label="主题">
-        <option value="light">亮色</option>
-        <option value="dark">暗色</option>
-        <option value="auto">跟随系统</option>
-      </select>
+      <div class="theme-switch" id="theme-switch" role="group" aria-label="主题">
+        <button class="theme-btn" type="button" data-theme-mode="light" aria-pressed="false" aria-label="亮色" title="亮色">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.34 17.66-1.41 1.41" />
+            <path d="m19.07 4.93-1.41 1.41" />
+          </svg>
+        </button>
+        <button class="theme-btn" type="button" data-theme-mode="dark" aria-pressed="false" aria-label="暗色" title="暗色">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </svg>
+        </button>
+        <button class="theme-btn" type="button" data-theme-mode="auto" aria-pressed="false" aria-label="跟随系统" title="跟随系统">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8" />
+            <path d="M12 17v4" />
+          </svg>
+        </button>
+      </div>
       <button class="btn ghost" id="refresh-btn" type="button">刷新</button>
       <button class="btn ghost" id="logout-btn" type="button">退出登录</button>
     </div>
