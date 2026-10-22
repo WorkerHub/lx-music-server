@@ -71,7 +71,11 @@ Secrets:
 
 ### 4. Configure users (`LX_USERS`, optional / legacy only, first-boot seeding)
 
-You can skip this section entirely: the current version does not require `LX_USERS` — leave it empty and create users from `/admin`. What follows applies only when upgrading from an older version (where it is required), or when you want to seed existing users in one go on first deployment.
+- **New deployment**: you can skip this section entirely. The current version does not require `LX_USERS` — deploy with it empty and create users from `/admin` (see "Admin Panel").
+- **Upgrading from an older version**: configure `LX_ADMIN_PASSWORD_HASH` (the SHA-256 of the admin panel password, **required**) **before** deploying the new version; if it is missing or malformed, the deployment fails.
+- **After deploying the new version**: open `/admin` and confirm all of your existing users are present (the one-time import has completed), **then** delete the `LX_USERS` secret. From then on, add, remove or reset users in the admin panel.
+
+The rest of this section documents the two `LX_USERS` formats and the security notes; you only need them for first-boot seeding, including upgrades from an older version.
 
 `LX_USERS` is delivered as a **Secret** (uploaded by GitHub Actions via `wrangler deploy --secrets-file`, no longer written to `wrangler.toml` `[vars]`, so it does not show up in plaintext in the Cloudflare dashboard variables list). Two input formats are supported.
 
