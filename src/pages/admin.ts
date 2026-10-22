@@ -2223,7 +2223,7 @@ ${adminStyles}
         <dl class="about-list">
           <div class="about-row">
             <dt>原始项目</dt>
-            <dd><a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">lx-music-sync-server</a></dd>
+            <dd><a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">https://github.com/lyswhut/lx-music-sync-server</a></dd>
           </div>
           <div class="about-row">
             <dt>相关项目</dt>
