@@ -1575,4 +1575,35 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     expect(creditSection).toContain('<dl class="about-list">')
     expect(creditSection).toContain('<div class="about-row">')
   })
+
+  it('shows full https URLs on the about page links', () => {
+    const aboutTab = adminPageHtml.slice(
+      adminPageHtml.indexOf('<div id="tab-panel-about"'),
+      adminPageHtml.indexOf('<div class="modal" id="modal"'),
+    )
+    // 源码仓库行文案是完整 URL，链接属性不变。
+    expect(aboutTab).toContain(
+      '<a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">https://github.com/WorkerHub/lx-music-server</a>',
+    )
+    expect(aboutTab).not.toContain('>WorkerHub/lx-music-server</a>')
+    // 「相关项目」标题只出现一次，两个仓库链接按 desktop / mobile 顺序放在同一个 dd 里。
+    expect(aboutTab.match(/<dt>相关项目<\/dt>/g)).toHaveLength(1)
+    const relatedRow = aboutTab.slice(
+      aboutTab.indexOf('<dt>相关项目</dt>'),
+      aboutTab.indexOf('</dl>', aboutTab.indexOf('<dt>相关项目</dt>')),
+    )
+    expect(relatedRow.match(/<dd>/g)).toHaveLength(1)
+    expect(relatedRow).toContain(
+      '<a href="https://github.com/lyswhut/lx-music-desktop" target="_blank" rel="noopener noreferrer">https://github.com/lyswhut/lx-music-desktop</a>',
+    )
+    expect(relatedRow).toContain(
+      '<a href="https://github.com/lyswhut/lx-music-mobile" target="_blank" rel="noopener noreferrer">https://github.com/lyswhut/lx-music-mobile</a>',
+    )
+    expect(relatedRow.indexOf('lx-music-desktop')).toBeLessThan(
+      relatedRow.indexOf('lx-music-mobile'),
+    )
+    for (const shortName of ['>lx-music-desktop</a>', '>lx-music-mobile</a>']) {
+      expect(relatedRow).not.toContain(shortName)
+    }
+  })
 })
