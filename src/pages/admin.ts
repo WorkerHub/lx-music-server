@@ -2142,7 +2142,7 @@ ${adminStyles}
           <div class="about-row">
             <dt>源码仓库</dt>
             <dd>
-              <a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">WorkerHub/lx-music-server</a>
+              <a id="about-repo" href="https://github.com/WorkerHub/lx-music-server" target="_blank" rel="noopener noreferrer">https://github.com/WorkerHub/lx-music-server</a>
             </dd>
           </div>
         </dl>
@@ -2162,11 +2162,10 @@ ${adminStyles}
           </div>
           <div class="about-row">
             <dt>相关项目</dt>
-            <dd><a href="https://github.com/lyswhut/lx-music-desktop" target="_blank" rel="noopener noreferrer">lx-music-desktop</a></dd>
-          </div>
-          <div class="about-row">
-            <dt>相关项目</dt>
-            <dd><a href="https://github.com/lyswhut/lx-music-mobile" target="_blank" rel="noopener noreferrer">lx-music-mobile</a></dd>
+            <dd>
+              <a href="https://github.com/lyswhut/lx-music-desktop" target="_blank" rel="noopener noreferrer">https://github.com/lyswhut/lx-music-desktop</a><br>
+              <a href="https://github.com/lyswhut/lx-music-mobile" target="_blank" rel="noopener noreferrer">https://github.com/lyswhut/lx-music-mobile</a>
+            </dd>
           </div>
         </dl>
       </section>
