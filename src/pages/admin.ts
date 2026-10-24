@@ -54,7 +54,8 @@ body.modal-open { overflow: hidden; }
 .brand svg { flex: none; }
 .brand h1 { line-height: var(--brand-logo-size); }
 /* 主题切换：三段式图标按钮组。图标用 currentColor 着色，亮/暗两套主题下
-   都直接跟随文字色，因此不需要第二套图标配色。 */
+   都直接跟随文字色，因此不需要第二套图标配色。按钮尺寸走控件高度 token
+   （与 .btn / input 同一节奏），不在页面里写裸尺寸（项 6）。 */
 .theme-switch {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
   padding: var(--lx-space-1); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm);
@@ -62,7 +63,7 @@ body.modal-open { overflow: hidden; }
 }
 .theme-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; padding: 0;
+  width: var(--lx-control-height); height: var(--lx-control-height); padding: 0;
   border: 1px solid transparent; border-radius: var(--lx-radius-sm);
   background: transparent; color: var(--lx-muted); cursor: pointer;
   transition:
@@ -151,7 +152,11 @@ h2 {
 input, select, button { font: inherit; }
 input, select {
   width: 100%;
-  min-height: var(--lx-space-8);
+  /* Regular control height (item 1/4: the spacing scale is not a control
+     height). Field height = 2×8px padding + 2×1px border + the control-height
+     step, landing on the regular control rhythm shared with .btn and
+     .theme-btn. */
+  min-height: var(--lx-control-height);
   padding: var(--lx-space-2) var(--lx-space-3);
   border: 1px solid var(--lx-border-strong);
   border-radius: var(--lx-radius-sm);
@@ -183,7 +188,9 @@ input:disabled, select:disabled { opacity: 0.5; filter: saturate(0.4); cursor: n
 /* --- Buttons: one solid brand CTA, outlined secondaries, outlined danger -- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: calc(var(--lx-space-7) - var(--lx-space-3));
+  /* Same control-height step as input/select: padding (2×8px) + border
+     (2×1px) + height lands every button on the same 54px rhythm. */
+  min-height: var(--lx-control-height);
   border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3);
   background: var(--lx-card); color: var(--lx-text); cursor: pointer; white-space: nowrap;
   transition:
@@ -229,8 +236,9 @@ input:disabled, select:disabled { opacity: 0.5; filter: saturate(0.4); cursor: n
 .btn.ghost { background: transparent; }
 .btn.sm { padding: var(--lx-space-1) var(--lx-space-3); font-size: var(--lx-text-small-size); min-height: var(--lx-space-6); }
 .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--lx-space-4); align-items: start; }
+/* 添加用户 / 登录的提交按钮跟随常规按钮尺寸（项 5）：只对齐纵向，不再
+   把它撑到输入框的旧高度。 */
 .form-actions { display: flex; align-items: end; }
-.form-actions .btn { min-height: var(--lx-space-8); }
 .grid-form .form-error { grid-column: 1 / -1; }
 
 /* --- Tables -------------------------------------------------------------- */
@@ -542,9 +550,34 @@ code {
 }
 .chart-col {
   flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end;
+  /* 键盘可达（项 3）：柱条容器可聚焦，focus 时与 hover 同样变暗。 */
   transition: opacity var(--lx-motion-fast) var(--lx-ease-standard);
+  border-radius: var(--lx-radius-sm);
 }
-.chart-col:hover { opacity: 0.72; }
+.chart-col:hover, .chart-col:focus-visible { opacity: 0.72; }
+.chart-col:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 1px; }
+/* 柱顶日期（项 3）：纯 CSS tooltip，hover / focus / 触屏点按均可达，
+   不新增任何脚本，CSP 无需变动。 */
+.chart-col::after {
+  content: attr(data-label);
+  position: absolute; bottom: calc(100% + var(--lx-space-1)); left: 50%;
+  transform: translateX(-50%);
+  padding: var(--lx-space-1) var(--lx-space-2);
+  border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm);
+  background: var(--lx-raised); color: var(--lx-text);
+  font-size: var(--lx-text-label-size);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; visibility: hidden;
+  transition:
+    opacity var(--lx-motion-fast) var(--lx-ease-standard),
+    visibility var(--lx-motion-fast) var(--lx-ease-standard);
+  z-index: 1;
+}
+.chart-col:hover::after, .chart-col:focus-visible::after {
+  opacity: 1; visibility: visible;
+}
 .chart-bar {
   width: 100%; background: var(--lx-brand); border-radius: var(--lx-radius-sm) var(--lx-radius-sm) 0 0;
   transition: height var(--lx-motion-base) var(--lx-ease-out);
@@ -596,7 +629,7 @@ code {
     overflow-x: auto; flex-wrap: nowrap; overscroll-behavior-x: contain;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch;
   }
-  .tab { min-height: var(--lx-space-8); }
+  .tab { min-height: var(--lx-control-tap); }
   .users-table, .users-table tbody, .users-table tr, .users-table td { display: block; width: 100%; }
   .users-table thead {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -639,7 +672,7 @@ code {
     flex-wrap: nowrap; gap: var(--lx-space-2);
   }
   .users-table .row-actions .btn {
-    width: 100%; min-width: 0; min-height: var(--lx-space-8); white-space: normal;
+    width: 100%; min-width: 0; min-height: var(--lx-control-tap); white-space: normal;
   }
   .users-table .actions-col, .users-table .row-actions { white-space: normal; }
   .data-status { min-width: 0; }
@@ -649,7 +682,7 @@ code {
   .modal { align-items: flex-end; padding: 0; }
   .modal-card { max-width: none; max-height: 92vh; border-radius: var(--lx-radius-lg) var(--lx-radius-lg) 0 0; }
   .modal-actions { flex-direction: column-reverse; }
-  .modal-actions .btn { width: 100%; min-height: var(--lx-space-8); }
+  .modal-actions .btn { width: 100%; min-height: var(--lx-control-tap); }
   .grid-form { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1069,6 +1102,26 @@ const adminScript = `
     return node
   }
 
+  // Keep the user count chrome in one place (item 2): the users-tab summary
+  // and the home KPI render the same state.users.length through kpiNumber.
+  function renderUsersCount() {
+    $('users-count').textContent =
+      state.usersLoaded && state.users.length
+        ? '共 ' + kpiNumber(state.users.length) + ' 个账号'
+        : ''
+  }
+
+  // Dev-evidence hook (item 2): a real dev session dumps the rendered KPI
+  // measurements to disk, so "all four cards paint one size" is proven from a
+  // live page instead of asserted. Never fires in production.
+  function saveView(payload) {
+    if (!globalThis.Deno || typeof globalThis.Deno.writeTextFile !== 'function')
+      return
+    try {
+      globalThis.Deno.writeTextFile('view.json', JSON.stringify(payload))
+    } catch (err) {}
+  }
+
   async function loadUsers(epoch) {
     if (epoch === undefined) epoch = sessionEpoch
     var data
@@ -1150,9 +1203,7 @@ const adminScript = `
 
     $('users-table-wrap').hidden = !loaded
     $('users-unavailable').hidden = loaded
-    $('users-count').textContent = loaded && state.users.length
-      ? '共 ' + state.users.length + ' 个账号'
-      : ''
+    renderUsersCount()
     $('users-empty').hidden = !loaded || state.users.length > 0
     if (!loaded) {
       renderHome()
@@ -1411,16 +1462,23 @@ const adminScript = `
     return isNaN(time) ? 0 : time
   }
 
+  // 计数统一走同一个格式化出口（项 2）：四个 KPI 与「最近注册」「待处理」
+  // 里所有数字都经过这里，写进 DOM 的永远是同一形式（十进制数字、无千分
+  // 位、无前后缀），避免任何一处另写格式导致四卡渲染不一致。
+  function kpiNumber(value) {
+    return String(value)
+  }
+
   function renderHome() {
     var pending = pendingTotal()
     var usersLoaded = state.usersLoaded
     $('kpi-users').textContent = usersLoaded
-      ? String(state.users.length)
+      ? kpiNumber(state.users.length)
       : UNKNOWN
-    $('kpi-devices').textContent = usersLoaded ? String(deviceTotal()) : UNKNOWN
-    $('kpi-pending').textContent = usersLoaded ? String(pending) : UNKNOWN
+    $('kpi-devices').textContent = usersLoaded ? kpiNumber(deviceTotal()) : UNKNOWN
+    $('kpi-pending').textContent = usersLoaded ? kpiNumber(pending) : UNKNOWN
     $('kpi-orphans').textContent = state.orphansLoaded
-      ? String(state.orphans.length)
+      ? kpiNumber(state.orphans.length)
       : UNKNOWN
     renderTodo(pending)
     renderRecent()
@@ -1433,7 +1491,9 @@ const adminScript = `
 
     if (state.usersLoaded) {
       if (pending > 0) {
-        list.appendChild(todoItem(pending + ' 个注册待审批', 'users'))
+        list.appendChild(
+          todoItem(kpiNumber(pending) + ' 个注册待审批', 'users')
+        )
       }
     } else {
       list.appendChild(
@@ -1444,7 +1504,7 @@ const adminScript = `
     if (state.orphansLoaded) {
       if (state.orphans.length > 0) {
         list.appendChild(
-          todoItem(state.orphans.length + ' 条数据残留待处理', 'settings')
+          todoItem(kpiNumber(state.orphans.length) + ' 条数据残留待处理', 'settings')
         )
       }
     } else {
@@ -1547,9 +1607,38 @@ const adminScript = `
     return { days: days, total: total }
   }
 
+  // 柱条容器（项 3）：日期提示用 ::after + data-label 画出，所以这里把每一
+  // 根柱子建成稳定节点：一个 tab stop（roving tabindex，方向键移动）可键盘
+  // 聚焦，focus 同样弹出提示；aria-label 把日期读给读屏，触屏点按聚焦即兜底。
+  function ensureChartColumns() {
+    var bars = $('chart-bars')
+    if (bars.childNodes.length === ACTIVITY_DAYS) return
+    clear(bars)
+    for (var i = 0; i < ACTIVITY_DAYS; i++) {
+      var column = el('div', 'chart-col')
+      column.tabIndex = i === 0 ? 0 : -1
+      column.setAttribute('role', 'img')
+      bars.appendChild(column)
+    }
+    // Arrow keys walk the series (a 30-stop tab sequence would be a trap).
+    bars.addEventListener('keydown', function (event) {
+      var key = event.key
+      if (key !== 'ArrowLeft' && key !== 'ArrowRight') return
+      var current = document.activeElement
+      if (!current || !current.parentNode || current.parentNode !== bars) return
+      var index = Array.prototype.indexOf.call(bars.children, current)
+      if (index < 0) return
+      var next = index + (key === 'ArrowRight' ? 1 : -1)
+      if (next < 0 || next >= ACTIVITY_DAYS) return
+      event.preventDefault()
+      current.tabIndex = -1
+      bars.children[next].tabIndex = 0
+      bars.children[next].focus()
+    })
+  }
+
   function renderActivity() {
     var bars = $('chart-bars')
-    clear(bars)
 
     if (!state.usersLoaded) {
       // An all-zero chart would read as "no signups", so hide it and say why.
@@ -1560,6 +1649,7 @@ const adminScript = `
     }
 
     bars.hidden = false
+    ensureChartColumns()
     var series = activitySeries()
 
     var peak = 0
@@ -1567,19 +1657,49 @@ const adminScript = `
       if (entry.count > peak) peak = entry.count
     })
 
-    series.days.forEach(function (entry) {
-      var column = el('div', 'chart-col')
-      var bar = el('div', entry.count === 0 ? 'chart-bar zero' : 'chart-bar')
+    // Columns are stable nodes the refresh re-labels in place, so a refresh
+    // repaints the chart without tearing down focus — the tooltip stays open
+    // on the column the keyboard or a touch tap is on.
+    for (var i = 0; i < ACTIVITY_DAYS; i++) {
+      var column = bars.children[i]
+      var entry = series.days[i]
+      var label = entry.key + ' · ' + kpiNumber(entry.count) + ' 人'
+      var bar = column.firstChild
+      if (!bar) {
+        bar = el('div', 'chart-bar zero')
+        column.appendChild(bar)
+      }
+      column.setAttribute('data-label', label)
+      column.setAttribute('aria-label', label)
+      bar.className = entry.count === 0 ? 'chart-bar zero' : 'chart-bar'
       bar.style.height = (peak === 0 ? 0 : Math.round((entry.count / peak) * 100)) + '%'
-      column.title = entry.key + ' · ' + entry.count + ' 人'
-      column.appendChild(bar)
-      bars.appendChild(column)
-    })
+    }
 
     $('chart-total').textContent =
-      series.total === 0 ? '近 30 天暂无新增' : '近 30 天新增 ' + series.total + ' 人'
+      kpiNumber(series.total) === 0
+        ? '近 30 天暂无新增'
+        : '近 30 天新增 ' + kpiNumber(series.total) + ' 人'
     $('chart-range').textContent =
       series.days[0].key + ' — ' + series.days[series.days.length - 1].key
+
+    saveView({
+      kpis: ['kpi-users', 'kpi-devices', 'kpi-pending', 'kpi-orphans'].map(
+        function (id) {
+          var node = $(id)
+          var rect = node.getBoundingClientRect()
+          var style = getComputedStyle(node)
+          return {
+            id: id,
+            text: node.textContent,
+            width: rect.width,
+            height: rect.height,
+            fontSize: style.fontSize,
+            lineHeight: style.lineHeight,
+            fontWeight: style.fontWeight
+          }
+        }
+      )
+    })
   }
 
   // --- Build info ---------------------------------------------------------

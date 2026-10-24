@@ -68,6 +68,8 @@ describe('shared design tokens', () => {
     for (const token of [
       '--lx-font-body:',
       '--lx-font-mono:',
+      '--lx-control-height: 36px;',
+      '--lx-control-tap: 48px;',
       '--lx-radius-sm: 6px;',
       '--lx-radius-md: 10px;',
       '--lx-radius-lg: 14px;',
