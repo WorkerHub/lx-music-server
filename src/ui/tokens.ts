@@ -77,6 +77,9 @@ export const baseTokensCss = `:root {
   --lx-radius-sm: 6px;
   --lx-radius-md: 10px;
   --lx-radius-lg: 14px;
+  /* 18px = 36px 控件高度的一半：端部按钮上下各用一次即拼成半圆，
+     与同边内角 --lx-radius-sm 之和 24px ≤ 36px，不触发 CSS 相邻圆角缩放。 */
+  --lx-radius-pill: 18px;
   --lx-radius-full: 999px;
   --lx-shadow-1: 0 1px 2px rgba(14, 20, 28, 0.06);
   --lx-shadow-2: 0 12px 32px -8px rgba(14, 20, 28, 0.18);
