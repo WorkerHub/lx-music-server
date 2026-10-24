@@ -28,6 +28,7 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(circle at 12% -10%, var(--lx-brand-soft), transparent 55%),
     radial-gradient(circle at 92% 8%, var(--lx-sunken), transparent 45%);
@@ -111,14 +112,32 @@ input:focus { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
   min-height: var(--lx-space-8);
   border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-4);
   background: var(--lx-card); color: var(--lx-text); cursor: pointer;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-crisp) var(--lx-ease-standard);
 }
-.btn:hover:not(:disabled) { border-color: var(--lx-muted); }
+.btn:hover:not(:disabled) { border-color: var(--lx-muted); background: var(--lx-sunken); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn:disabled { opacity: 0.5; filter: saturate(0.4); cursor: not-allowed; }
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
 .btn.primary:hover:not(:disabled) { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
 .btn.ghost { background: transparent; }
 .submit-row { display: flex; flex-direction: column; gap: var(--lx-space-3); }
+.btn.primary[aria-busy="true"]::before {
+  content: '';
+  flex: none;
+  width: var(--lx-space-4);
+  height: var(--lx-space-4);
+  margin-right: var(--lx-space-2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--lx-radius-full);
+  animation: lx-spin 720ms linear infinite;
+}
+@keyframes lx-spin { to { transform: rotate(360deg); } }
 /* Credential block: the success state of a registration is the pair the user
    must carry to the client, so it is typeset like data — sunken surface,
    monospaced tabular values (docs/design-system.md §0). */
@@ -152,11 +171,26 @@ code {
 }
 .success-steps { margin: 0; padding-left: var(--lx-space-5); color: var(--lx-text); font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
 .success-steps li + li { margin-top: var(--lx-space-1); }
+@keyframes lx-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card, .field, .server-box, .btn {
+  animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
+}
 @media (max-width: 640px) {
   .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
   .card { padding: var(--lx-space-4); }
   .btn { width: 100%; }
   .server-row { flex-direction: column; gap: var(--lx-space-1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .btn:active:not(:disabled) { transform: none; }
 }
 `
 
@@ -215,6 +249,12 @@ const registerScript = `
     var node = $('form-error')
     node.textContent = ''
     node.hidden = true
+  }
+
+  function setSubmitBusy(busy) {
+    var submit = $('submit')
+    submit.disabled = busy
+    submit.setAttribute('aria-busy', busy ? 'true' : 'false')
   }
 
   function render() {
@@ -279,8 +319,7 @@ const registerScript = `
       return
     }
 
-    var submit = $('submit')
-    submit.disabled = true
+    setSubmitBusy(true)
     try {
       var res = await fetch('/api/register', {
         method: 'POST',
@@ -318,7 +357,7 @@ const registerScript = `
     } catch (err) {
       showFormError('网络错误，请检查连接后重试。')
     } finally {
-      submit.disabled = false
+      setSubmitBusy(false)
     }
   })
 

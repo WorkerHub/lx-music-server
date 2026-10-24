@@ -38,11 +38,17 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(circle at 12% -10%, var(--lx-brand-soft), transparent 55%),
     radial-gradient(circle at 92% 8%, var(--lx-sunken), transparent 45%);
 }
-.wrap { max-width: 640px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
+.wrap {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8);
+  animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
+}
 .brand { display: flex; align-items: center; gap: var(--lx-space-4); }
 .brand svg { flex: none; }
 .brand-name { display: flex; flex-direction: column; gap: var(--lx-space-1); }
@@ -88,6 +94,23 @@ body::before {
   box-shadow: var(--lx-shadow-1);
 }
 .card + .card { margin-top: var(--lx-space-4); }
+.card, .connect-strip {
+  transition:
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    box-shadow var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-fast) var(--lx-ease-standard);
+}
+@media (hover: hover) {
+  .card:hover, .connect-strip:hover {
+    border-color: var(--lx-border-strong);
+    box-shadow: var(--lx-shadow-2);
+    transform: translateY(-1px);
+  }
+}
+@keyframes lx-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .card h2 {
   font-size: var(--lx-text-h2-size);
   font-weight: var(--lx-text-h2-weight);
@@ -167,13 +190,39 @@ body::before {
   padding: var(--lx-space-3) var(--lx-space-5);
   background: var(--lx-card); color: var(--lx-text);
   text-decoration: none; font: inherit;
+  min-height: var(--lx-space-8);
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-crisp) var(--lx-ease-standard);
 }
-.btn:hover { border-color: var(--lx-muted); }
+.btn:hover { border-color: var(--lx-muted); background: var(--lx-sunken); }
+.btn:active { transform: scale(0.98); }
 .btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+.btn:disabled, .btn[aria-disabled="true"] {
+  opacity: 0.5;
+  filter: saturate(0.4);
+  cursor: not-allowed;
+  pointer-events: none;
+}
 /* Primary CTA: the only solid brand fill on the page, so the main action is
    unmistakable against the ghost secondary below it. */
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
 .btn.primary:hover { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
+.card, .connect-strip {
+  transition:
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    box-shadow var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-fast) var(--lx-ease-standard);
+}
+@media (hover: hover) {
+  .card:hover, .connect-strip:hover {
+    border-color: var(--lx-border-strong);
+    box-shadow: var(--lx-shadow-2);
+    transform: translateY(-1px);
+  }
+}
 .hint { color: var(--lx-muted); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); margin: 0; flex-basis: 100%; }
 .notice {
   margin: 0; flex-basis: 100%;
@@ -193,6 +242,10 @@ footer {
   font-size: var(--lx-text-small-size);
   line-height: var(--lx-text-small-lh);
 }
+@keyframes lx-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @media (max-width: 640px) {
   .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
   .brand { align-items: flex-start; }
@@ -200,6 +253,16 @@ footer {
   .actions { flex-direction: column; align-items: stretch; }
   .btn { width: 100%; }
   .hint, .notice { text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .card:hover, .connect-strip:hover { transform: none; }
+  .btn:active { transform: none; }
 }
 `
 

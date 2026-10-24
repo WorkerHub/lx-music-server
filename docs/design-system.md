@@ -177,12 +177,6 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 | `--lx-heading` | `#0e141c` | `#f2f4f7` | 标题 |
 | `--lx-backdrop` | `#16202c` | `#05070a` | 弹窗遮罩底色（配 0.55 透明度使用；Stage 3 裁决增补，见 §5.4） |
 
-### 5.4 Stage 3 裁决增补（2026-10-24 · Mike 记录的 Stage 2 跟进项）
-
-- `--lx-backdrop` 新增于中性色阶（§5.2 表）。背景：Stage 2 评审发现 `.modal-backdrop` 复用 `--lx-heading`，暗色主题下该令牌反转为浅白，遮罩变成刺眼白雾。专用遮罩令牌比页面内暗色特判更符合「令牌即唯一来源」，故按契约 §9 变更流程增补本令牌（值按「与主题底色同族、略深/略深于 bg」选取），页面内不再对遮罩写主题特判。
-
-对比度（实测）：正文 `#1b2430`/`#f6f7f9` = **13.5:1**；muted `#5d6b7a`/`#ffffff` = **4.9:1**（AA ✓）；dark muted `#98a2b3`/`#1a1f26` = **7.0:1**；dark text `#e6e9ee`/`#1a1f26` = **12.6:1**。
-
 ### 5.3 状态色（三件套：bg / border / text，图标复用 text 色）
 
 变量命名：`<state>` ∈ ok / warn / danger，三色分别为 `--lx-<state>-bg`、`--lx-<state>-border`、`--lx-<state>-text`。
@@ -195,6 +189,12 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 | 信息 info | 复用 brand-soft 三件套 | 复用 brand-soft 三件套 |
 
 冻结规则：成功色与品牌色同属绿族但**不允许出现在同一组件的同一层级**（徽标 ok vs 激活 tab 不并排）；所有状态必须同时带文案或图标，禁止只靠颜色传达；`--lx-warn-text` 亮主题取 `#93370d`（on `#fffaeb` = **7.2:1**，修复现状 4.6 临界值）。
+
+### 5.4 Stage 3 裁决增补（2026-10-24 · Mike 记录的 Stage 2 跟进项）
+
+- `--lx-backdrop` 新增于中性色阶（§5.2 表）。背景：Stage 2 评审发现 `.modal-backdrop` 复用 `--lx-heading`，暗色主题下该令牌反转为浅白，遮罩变成刺眼白雾。专用遮罩令牌比页面内暗色特判更符合「令牌即唯一来源」，故按契约 §9 变更流程增补本令牌（值按「与主题底色同族、略深/略深于 bg」选取），页面内不再对遮罩写主题特判。
+
+对比度（实测）：正文 `#1b2430`/`#f6f7f9` = **13.5:1**；muted `#5d6b7a`/`#ffffff` = **4.9:1**（AA ✓）；dark muted `#98a2b3`/`#1a1f26` = **7.0:1**；dark text `#e6e9ee`/`#1a1f26` = **12.6:1**。
 
 ## 6. 圆角 / 阴影 / 边框
 
@@ -216,11 +216,13 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 
 | 令牌 | 值 | 用途 |
 | --- | --- | --- |
+| `--lx-motion-crisp` | 80ms | 按压、旋转 spinner 的最短反馈 |
 | `--lx-motion-fast` | 120ms | hover/active 反馈 |
 | `--lx-motion-base` | 200ms | 视图切换、tab、展开收起 |
 | `--lx-motion-slow` | 320ms | modal/toast 入场 |
 | `--lx-ease-standard` | `cubic-bezier(.2,.6,.3,1)` | 默认 |
 | `--lx-ease-out` | `cubic-bezier(.16,1,.3,1)` | 入场（上浮/淡入） |
+| `--lx-ease-emphasized` | `cubic-bezier(.22,1,.36,1)` | modal、toast 入场强调 |
 
 纪律：只动 `opacity` 与 `transform`（合成层属性）；入场位移 ≤ 8px；同一屏同时进行的动画 ≤ 3 个；`@media (prefers-reduced-motion: reduce)` 下所有 transition/animation 时长归 0（状态变化保留，过程去除）。全部 CSS 实现，home 保持零脚本。
 

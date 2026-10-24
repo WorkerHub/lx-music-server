@@ -75,11 +75,13 @@ export const baseTokensCss = `:root {
   --lx-radius-full: 999px;
   --lx-shadow-1: 0 1px 2px rgba(14, 20, 28, 0.06);
   --lx-shadow-2: 0 12px 32px -8px rgba(14, 20, 28, 0.18);
+  --lx-motion-crisp: 80ms;
   --lx-motion-fast: 120ms;
   --lx-motion-base: 200ms;
   --lx-motion-slow: 320ms;
   --lx-ease-standard: cubic-bezier(.2,.6,.3,1);
   --lx-ease-out: cubic-bezier(.16,1,.3,1);
+  --lx-ease-emphasized: cubic-bezier(.22,1,.36,1);
 }
 `
 
@@ -114,6 +116,13 @@ const darkTokens = `
   --lx-danger-text: #fda29b;
   --lx-shadow-1: none;
   --lx-shadow-2: none;
+  --lx-motion-crisp: 80ms;
+  --lx-motion-fast: 120ms;
+  --lx-motion-base: 200ms;
+  --lx-motion-slow: 320ms;
+  --lx-ease-standard: cubic-bezier(.2,.6,.3,1);
+  --lx-ease-out: cubic-bezier(.16,1,.3,1);
+  --lx-ease-emphasized: cubic-bezier(.22,1,.36,1);
 `
 
 export const darkTokensCss = `[data-theme="dark"] {${darkTokens}}
