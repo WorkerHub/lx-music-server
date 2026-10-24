@@ -55,11 +55,12 @@ body.modal-open { overflow: hidden; }
 .brand h1 { line-height: var(--brand-logo-size); }
 /* 主题切换：三段式图标按钮组。图标用 currentColor 着色，亮/暗两套主题下
    都直接跟随文字色，因此不需要第二套图标配色。按钮尺寸走控件高度 token
-   （与 .btn / input 同一节奏），不在页面里写裸尺寸（项 6）。 */
+   （与 .btn / input 同一节奏），不在页面里写裸尺寸（项 6）。外层容器去掉
+   内边距与边框、只用圆角背景区分分组，整体高度与 .btn 顶栏节奏一致。 */
 .theme-switch {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
-  padding: var(--lx-space-1); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm);
-  background: var(--lx-card);
+  padding: 0; border: none; border-radius: var(--lx-radius-full);
+  background: var(--lx-sunken);
 }
 .theme-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -550,7 +551,10 @@ code {
 }
 .chart-col {
   flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end;
-  /* 键盘可达（项 3）：柱条容器可聚焦，focus 时与 hover 同样变暗。 */
+  /* 键盘可达（项 3）：柱条容器可聚焦，focus 时与 hover 同样变暗。
+     position: relative 是 ::after tooltip 的包含块：没有它，绝对定位会退化
+     到根视口，提示会飘到页面顶部、横向居中到整页而不是柱条（评审打回 #1）。 */
+  position: relative;
   transition: opacity var(--lx-motion-fast) var(--lx-ease-standard);
   border-radius: var(--lx-radius-sm);
 }
@@ -1111,17 +1115,6 @@ const adminScript = `
         : ''
   }
 
-  // Dev-evidence hook (item 2): a real dev session dumps the rendered KPI
-  // measurements to disk, so "all four cards paint one size" is proven from a
-  // live page instead of asserted. Never fires in production.
-  function saveView(payload) {
-    if (!globalThis.Deno || typeof globalThis.Deno.writeTextFile !== 'function')
-      return
-    try {
-      globalThis.Deno.writeTextFile('view.json', JSON.stringify(payload))
-    } catch (err) {}
-  }
-
   async function loadUsers(epoch) {
     if (epoch === undefined) epoch = sessionEpoch
     var data
@@ -1671,35 +1664,19 @@ const adminScript = `
       }
       column.setAttribute('data-label', label)
       column.setAttribute('aria-label', label)
+      // 原生 title 兜底：::after 提示之外，触屏长按/不支持伪元素的场景
+      // 仍能拿到日期（评审 nit 5）。
+      column.title = label
       bar.className = entry.count === 0 ? 'chart-bar zero' : 'chart-bar'
       bar.style.height = (peak === 0 ? 0 : Math.round((entry.count / peak) * 100)) + '%'
     }
 
     $('chart-total').textContent =
-      kpiNumber(series.total) === 0
+      series.total === 0
         ? '近 30 天暂无新增'
         : '近 30 天新增 ' + kpiNumber(series.total) + ' 人'
     $('chart-range').textContent =
       series.days[0].key + ' — ' + series.days[series.days.length - 1].key
-
-    saveView({
-      kpis: ['kpi-users', 'kpi-devices', 'kpi-pending', 'kpi-orphans'].map(
-        function (id) {
-          var node = $(id)
-          var rect = node.getBoundingClientRect()
-          var style = getComputedStyle(node)
-          return {
-            id: id,
-            text: node.textContent,
-            width: rect.width,
-            height: rect.height,
-            fontSize: style.fontSize,
-            lineHeight: style.lineHeight,
-            fontWeight: style.fontWeight
-          }
-        }
-      )
-    })
   }
 
   // --- Build info ---------------------------------------------------------

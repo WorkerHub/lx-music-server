@@ -1460,13 +1460,17 @@ describe('admin theme switch and brand assets', () => {
     expect(dark).toContain('--lx-bg: #0e1116;')
     expect(dark).toContain('--lx-card: #1a1f26;')
     expect(dark).toContain('--lx-text: #e6e9ee;')
-    // The new control is painted from the same variables as every other input.
+    // The new control is painted from variables like every other input.
     expect(between('input, select {', 'input:focus')).toContain(
       'background: var(--lx-card)',
     )
+    // The pill is now a flush sunken capsule (rework should-fix 3): token
+    // paint, no hardcoded colour, and it must not grow taller than the
+    // buttons it sits beside.
     expect(between('.theme-switch {', '\n}')).toContain(
-      'background: var(--lx-card)',
+      'background: var(--lx-sunken)',
     )
+    expect(between('.theme-switch {', '\n}')).toContain('padding: 0;')
     expect(between('.theme-switch {', '\n}')).not.toContain('#')
   })
 
@@ -2095,5 +2099,109 @@ describe('admin panel live-feedback fixes (ONE-164)', () => {
     // 稳定节点：刷新只改 data-label / 高度，不清空重建，焦点与提示不丢。
     expect(renderActivity).not.toContain('clear(bars)')
     expect(renderActivity).toContain('bars.children[i]')
+  })
+
+  it('keeps formatted output out of every logic comparison (rework family 1)', () => {
+    // 格式化出口只渲染展示，严禁参与数值/相等比较（评审打回 #2 的根因族）：
+    // kpiNumber() 返回字符串，与数字比较是死码（'0' === 0 恒 false）。
+    expect(adminPageHtml).toContain('function kpiNumber(value)')
+    expect(adminPageHtml).not.toMatch(
+      /kpiNumber\([^)]*\)\s*(===|==|!==|!=|>|<|>=|<=)/,
+    )
+    // 其余格式化工具同样不得参与比较。
+    for (const fn of [
+      'formatTime',
+      'summaryText',
+      'versionText',
+      'shortCommit',
+      'labelFrom',
+      'statusClass',
+    ]) {
+      expect(adminPageHtml).not.toMatch(
+        new RegExp(`${fn}\\([^)]*\\)\\s*(===|==|!==|!=)`),
+      )
+    }
+    // 计数逻辑比较一律用原始数值。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).toContain('series.total === 0')
+  })
+
+  it('keeps the chart tooltip anchored to its column (rework blocking 1)', () => {
+    // Same slice helper as `page markup safety`, local to this block.
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    // 绝对定位浮层必须有显式定位祖先，否则包含块退化到根视口（评审打回 #1）。
+    const chartCol = between('.chart-col {', '.chart-col:hover')
+    expect(chartCol).toContain('position: relative;')
+    const tooltip = between('.chart-col::after {', '.chart-col:hover::after')
+    expect(tooltip).toContain('position: absolute;')
+    // 定位规则实质断言：提示贴柱顶、横向居中于柱条。
+    expect(tooltip).toContain('bottom: calc(100% + var(--lx-space-1));')
+    expect(tooltip).toContain('left: 50%;')
+    expect(tooltip).toContain('transform: translateX(-50%);')
+    // 全页面扫描：每一个绝对/固定定位浮层都在一个显式定位的规则里（或自身）。
+    // 全套页面里的定位声明就这几处，逐一列明所属包含块。
+    const absCount = (adminPageHtml.match(/position: absolute;/g) ?? []).length
+    expect(absCount).toBe(3) // backdrop / tooltip / thead 视觉隐藏剪裁（非浮层）
+    expect(adminPageHtml).toContain('.modal { position: fixed; inset: 0;')
+    // backdrop 的包含块是 .modal（fixed），tooltip 的包含块是 .chart-col（relative），
+    // 剪裁规则是 1px 视觉隐藏（自身 absolute 定位，无浮层语义）。
+    expect(between('.modal-backdrop {', '\n}')).toContain('position: absolute;')
+  })
+
+  it('keeps the theme pill flush with the topbar button rhythm (rework should-fix 3)', () => {
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    // 外层胶囊不再加 padding+边框把自己撑高：整体高度就是按钮高度。
+    const pill = between('.theme-switch {', '\n}')
+    expect(pill).toContain('padding: 0;')
+    expect(pill).toContain('border: none;')
+    expect(pill).not.toContain('padding: var(')
+    // 按钮与 .btn 同一控件高度 token，无裸尺寸。
+    const themeRule = between('.theme-btn {', '.theme-btn:hover')
+    expect(themeRule).toContain('width: var(--lx-control-height);')
+    expect(themeRule).toContain('height: var(--lx-control-height);')
+  })
+
+  it('ships no local debug hooks in the production script (rework should-fix 4)', () => {
+    expect(adminPageHtml).not.toContain('saveView')
+    expect(adminPageHtml).not.toContain('globalThis.Deno')
+    // 渲染路径不得强制同步布局读取（getBoundingClientRect / getComputedStyle）。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).not.toContain('getBoundingClientRect')
+    expect(renderActivity).not.toContain('getComputedStyle')
+  })
+
+  it('keeps the empty-chart copy reachable and the title fallback (rework nits 5/6)', () => {
+    // 空态文案：判断用原始数值，字符串输出只拼展示（实质断言：条件与分支配对）。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    const totalBlock = renderActivity.slice(
+      renderActivity.indexOf("$('chart-total').textContent"),
+    )
+    expect(totalBlock).toContain('series.total === 0')
+    expect(totalBlock).toContain("'近 30 天暂无新增'")
+    expect(totalBlock).toContain("'近 30 天新增 '")
+    // 触屏兜底：原生 title 与 ::after 提示并存。
+    expect(renderActivity).toContain('column.title = label')
+    expect(adminPageHtml).toContain('.chart-col::after {')
   })
 })
