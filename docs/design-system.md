@@ -24,7 +24,7 @@ lx-music-server 的独特身份不是「又一个蓝色管理后台」，而是�
 
 | 现状 | 目标 | 差距 |
 | --- | --- | --- |
-| 全局 `font-size: 14px`，标题仅 24/20/18/17/16/15px 零散取值 | 7 级字号阶梯（12/13/14/16/20/24/30），每级绑定行高/字重/字距 | 字号不成体系，同级标题跨页不一致（home h1=24、admin h1=20） |
+| 全局 `font-size: 14px`，标题仅 24/20/18/17/16/15px 零散取值 | 7 级字号阶梯（12/13/14/16/18/24/30，以 §3.2 为准），每级绑定行高/字重/字距 | 字号不成体系，同级标题跨页不一致（home h1=24、admin h1=20） |
 | 行高统一 1.5 | 标题 1.2–1.3、正文 1.5–1.65、说明文字 1.45 按级分工 | 大标题行高偏松、长文偏挤 |
 | 字重只有 400/600/700 裸用 | 字重阶梯与层级绑定（见 §3） | kpi-value 700 与 field-label 600 无体系依据 |
 | 无字距规则 | 大标题 -0.02em 收紧、12px 全大写标签 +0.06em、正文 0 | 完全缺失 |
@@ -35,7 +35,7 @@ lx-music-server 的独特身份不是「又一个蓝色管理后台」，而是�
 
 | 现状 | 目标 | 差距 |
 | --- | --- | --- |
-| 间距值 2/4/6/8/10/12/14/16/18/20/24/56/64px 混用 | 4px 基准阶梯 4/8/12/16/20/24/32/48/64 | 非 4 倍数（6/9/10/14/18/22/56）遍布三页 |
+| 间距值 2/4/6/8/10/12/14/16/18/20/24/56/64px 混用 | 4px 基准阶梯 4/8/12/16/24/32/48/64（8 档，以 §4 为准） | 非 4 倍数（6/9/10/14/18/22/56）遍布三页 |
 | 卡片内边距三页不一致（20/18/14px） | 卡片 padding 桌面 24 / 移动 16，与页面容器 padding 成比例 | 节奏无规则 |
 | 区块间几乎同一 gap | 区块间距 ≥ 卡片内距 × 1.5，形成节奏差 | home 56/24/20 随机，admin 全靠 16 平铺 |
 
@@ -53,7 +53,7 @@ lx-music-server 的独特身份不是「又一个蓝色管理后台」，而是�
 | --- | --- | --- |
 | 品牌色 blue-600（#2563eb / #3b82f6）通用模板脸 | 唯一品牌绿（LX logo 族系），中性色阶带轻微冷调 | 原创性不足（见 §0） |
 | 中性色仅 5 档（bg/card/text/muted/line） | 8 档中性阶（bg/sunken/card/raised/line/border-strong/muted/text/heading） | 暗主题 `--shadow: none` 后层级扁平，缺少 raised 层 |
-| 状态色只定义 bg+text 两色，无边框/图标色 | 状态色四件套（bg/border/icon/text） | notice/badge 边框直接 transparent，弱主题下轮廓不清 |
+| 状态色只定义 bg+text 两色，无边框/图标色 | 状态色三件套（bg/border/text，图标复用 text 色） | notice/badge 边框直接 transparent，弱主题下轮廓不清 |
 | 对比度未验证 | 正文 ≥4.5:1、大字与组件 ≥3:1，逐对列出实测值 | 暗主题 `--muted #98a2b3` on `#1a1f26` ≈ 7.0（达标），但 `--warn-text #fec84b` on `#2e2410` ≈ 8.6 达标而亮主题 `#b54708` on `#fffaeb` ≈ 4.6 临界，需统一复测并在 §5 冻结达标值 |
 
 ### 1.5 motion 动效
@@ -93,16 +93,21 @@ lx-music-server 的独特身份不是「又一个蓝色管理后台」，而是�
 
 ## 2. 令牌集中方式（冻结决定）
 
-新建 **`src/ui/tokens.ts`**，导出唯一令牌源：
+新建 **`src/ui/tokens.ts`**，导出唯一令牌源。SSR 静态页（home/register）与 admin 面板注入方式不同——admin 的主题由 JS 状态与 `[data-theme]` 严格控制，`pages.test.ts` 硬断言 admin 页面**不得包含** `@media (prefers-color-scheme: dark)`，因此导出三组字符串：
 
 ```ts
-export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :root { ... } } [data-theme='dark'] { ... }`
+export const baseTokensCss = `:root { ... }` // 全部令牌（亮色为默认）
+export const darkTokensCss = `[data-theme="dark"] { ... }` // 暗色覆盖，无 @media
+export const ssrDarkTokensCss = `@media (prefers-color-scheme: dark) { :root { ... } }` // 系统暗色跟随，仅 SSR 页
+
+export const ssrTokenCss = baseTokensCss + ssrDarkTokensCss // home / register 用
+export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁含 @media
 ```
 
-- 颜色 / 字号 / 行高 / 字重 / 字距 / 间距 / 圆角 / 阴影 / 缓动 / 时长全部以 CSS 自定义属性定义于此，字符串内插值拼成一段 `<style>` 注入文本。
-- home/register/admin 三页各自 `import { tokenCss }` 并内联进 `<style>`；**不使用外部 .css 文件**（CSP 红线）。
+- 颜色 / 字号 / 行高 / 字重 / 字距 / 间距 / 圆角 / 阴影 / 缓动 / 时长全部以 CSS 自定义属性定义于此，字符串内插值拼成 `<style>` 注入文本。
+- home/register 注入 `ssrTokenCss`，admin 注入 `adminTokenCss`；**不使用外部 .css 文件**（CSP 红线）。
 - 页面私有样式仍留在各页文件，但**除 `src/ui/tokens.ts` 外，任何源码文件不得出现裸 hex/hsl()/rgb() 颜色字面量**（logo SVG 的品牌固定色除外，其取值也引用令牌注释中的来源值）。
-- 命名规范：`--lx-<域>-<名>`，如 `--lx-color-bg`、`--lx-space-4`、`--lx-text-size-3`、`--lx-motion-fast`。
+- 命名规范：`--lx-<域>-<名>`，使用正文正式令牌名，如 `--lx-bg`、`--lx-space-4`、`--lx-text-h2`、`--lx-motion-fast`。
 
 ---
 
@@ -129,6 +134,8 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 | `--lx-text-small` | 13px | 1.45 | 400 | 0 | 次要说明、状态行 |
 | `--lx-text-label` | 12px | 1.4 | 600 | +0.04em | 表头、字段标签、徽标（英文场景大写） |
 
+上表中每级阶梯是 4 个属性的组合，`letter-spacing` 无法合入 `font:` 简写，单一变量无法承载。Stage 2 在 `tokens.ts` 中按级拆解为四个变量：`--lx-text-<step>-size` / `--lx-text-<step>-lh` / `--lx-text-<step>-weight` / `--lx-text-<step>-tracking`（`<step>` 为 display/h1/h2/h3/body/small/label）。
+
 中英混排：中文标点与西文之间不额外加空格（交给字体回退），段落内数字与西文按 `tabular-nums` 规则；标点悬挂不做（超出 CSS 可靠范围，避免炫技）。
 
 ## 4. 间距阶梯（4px 基准）
@@ -153,7 +160,7 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 | `--lx-brand-soft` | `#e6f6ee` | `#12291c` | 软底（激活 tab 底、选中态） |
 | `--lx-brand-border` | `#b3e2c8` | `#1f4530` | 软底描边、focus 环 |
 
-对比度（实测，WCAG）：`#157f4a` on `#ffffff` = **4.6:1**（正文 AA ✓）；`#4ade80` on `#111418` = **10.8:1**（✓）；`#ffffff` on `#157f4a` = **4.6:1**（✓）。
+对比度（实测，WCAG）：`#157f4a` on `#ffffff` = **5.04:1**（正文 AA ✓）；`#4ade80` on `#0e1116` = **10.9:1**（✓）；`#ffffff` on `#157f4a` = **5.04:1**（✓）。
 
 ### 5.2 中性色阶
 
@@ -171,7 +178,9 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 
 对比度（实测）：正文 `#1b2430`/`#f6f7f9` = **13.5:1**；muted `#5d6b7a`/`#ffffff` = **4.9:1**（AA ✓）；dark muted `#98a2b3`/`#1a1f26` = **7.0:1**；dark text `#e6e9ee`/`#1a1f26` = **12.6:1**。
 
-### 5.3 状态色（四件套：bg / border / icon-text / on-soft-text）
+### 5.3 状态色（三件套：bg / border / text，图标复用 text 色）
+
+变量命名：`<state>` ∈ ok / warn / danger，三色分别为 `--lx-<state>-bg`、`--lx-<state>-border`、`--lx-<state>-text`。
 
 | 状态 | light bg / border / text | dark bg / border / text |
 | --- | --- | --- |
@@ -180,7 +189,7 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 | 危险 danger | `#fef3f2` / `#f5b8b2` / `#b42318` | `#331715` / `#5c2b27` / `#fda29b` |
 | 信息 info | 复用 brand-soft 三件套 | 复用 brand-soft 三件套 |
 
-冻结规则：成功色与品牌色同属绿族但**不允许出现在同一组件的同一层级**（徽标 ok vs 激活 tab 不并排）；所有状态必须同时带文案或图标，禁止只靠颜色传达；`--lx-warn-text` 亮主题取 `#93370d`（on `#fffaeb` = **4.7:1**，修复现状 4.6 临界值）。
+冻结规则：成功色与品牌色同属绿族但**不允许出现在同一组件的同一层级**（徽标 ok vs 激活 tab 不并排）；所有状态必须同时带文案或图标，禁止只靠颜色传达；`--lx-warn-text` 亮主题取 `#93370d`（on `#fffaeb` = **7.2:1**，修复现状 4.6 临界值）。
 
 ## 6. 圆角 / 阴影 / 边框
 
@@ -220,11 +229,11 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 | disabled | 透明度 .5 + 去饱和（`filter: saturate(.4)`）+ `cursor: not-allowed`；禁只靠透明度 |
 | loading | 按钮内文字替换为 spinner（CSS border 旋转圆环，16px，品牌色描边）+ 保留宽度不抖动；数据区用骨架条（`--lx-sunken` 上的 brand-soft 呼吸渐变） |
 
-空状态组件：图标位（40px，muted 色）+ h3 标题 + small 说明 + 可选次级操作；toast：右上角滑入（ease-out 320ms），成功/失败用状态色四件套，4s 自动消退。
+空状态组件：图标位（40px，muted 色）+ h3 标题 + small 说明 + 可选次级操作；toast：右上角滑入（ease-out 320ms），成功/失败用状态色三件套，4s 自动消退。
 
 ## 8. 响应式断点与页面布局
 
-断点：**≤640（移动）/ 641–1023（平板）/ ≥1024（桌面）**，令牌 `--lx-bp-sm: 640px`、`--lx-bp-md: 1024px`。触控目标 ≥ 40×40px（含 theme-btn、btn.sm、icon-btn，现状全部不达标需放大）。
+断点：**≤640（移动）/ 641–1023（平板）/ ≥1024（桌面）**。CSS 自定义属性不可在 `@media` 条件中解析（`@media (max-width: var(...))` 非法），且本项目无预处理器，因此 `tokens.ts` 导出 TypeScript 常量 `export const BREAKPOINTS = { sm: 640, md: 1024 } as const` 供 JS 使用；各页内联 `<style>` 中的 `@media` 一律写字面量 `640px` / `1024px`（单一真源为 `BREAKPOINTS` 常量，改断点时同步字面量）。触控目标 ≥ 40×40px（含 theme-btn、btn.sm、icon-btn，现状全部不达标需放大）。
 
 | 页面 | ≥1024 | 641–1023 | ≤640 |
 | --- | --- | --- | --- |
@@ -242,5 +251,6 @@ export const tokenCss = `:root { ... } @media (prefers-color-scheme: dark) { :ro
 - Stage 3：按 §1 差距清单逐页重构排版/留白/层级/配色/品牌印记；favicon 保持不变。
 - Stage 4：§7 动效与五态、§8 响应式（含用户表卡片化）。
 - 回归红线（父单冻结契约）：CSP 不变、路由与导出名不变、`LX Music server 管理面板` 等测试依赖文案保留、admin `[data-theme="dark"]` + localStorage 三态主题切换保留、home 禁 JS 可用、动态值只走 textContent。
+- **测试同步**：`src/routes/pages.test.ts:1348-1375` 目前对旧 CSS 字面量（如 `--bg: #f4f5f7`、`--bg: #111418`、`--primary-soft`）有硬编码断言；Stage 2 替换令牌层时必须同步更新这些断言（admin 不得含 `@media (prefers-color-scheme: dark)` 的断言保留），改动前报 Mike 批准。
 
 本契约自写入 PR 起冻结；变更须经 Mike 裁决并回填本文档。
