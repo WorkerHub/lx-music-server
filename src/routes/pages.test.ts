@@ -1,14 +1,98 @@
 import { describe, expect, it } from 'vitest'
+import { sha256Hex } from '@/admin/auth'
 import rootApp from '@/index'
 import { adminPageHtml } from '@/pages/admin'
 import { homePageHtml } from '@/pages/home'
 import { registerPageHtml } from '@/pages/register'
 import { updateSettings } from '@/registry/client'
+import adminApp from '@/routes/admin'
 import { createTestEnv } from '@/test/registryEnv'
 import { BREAKPOINTS, baseTokensCss, darkTokensCss } from '@/ui/tokens'
 import app from './pages'
 
 const ADMIN_HASH = 'a'.repeat(64)
+
+// One harness for the live-render evidence below (item 2): a real admin
+// session against the real routes, so the four KPI values are the same bytes a
+// browser receives — not a hand-written fixture.
+const loginAdmin = async (password: string, hash: string) => {
+  const { env: baseEnv } = await createTestEnv({ adminPasswordHash: hash })
+  const env = { ...baseEnv, LX_ADMIN_PASSWORD_HASH: hash } as unknown as LX.Env
+  const res = await adminApp.request(
+    '/api/admin/login',
+    { method: 'POST', body: JSON.stringify({ password }) },
+    env,
+  )
+  expect(res.status).toBe(200)
+  const cookie = res.headers.get('set-cookie')?.split(';')[0]
+  expect(cookie).toBeTruthy()
+  return { env, cookie: cookie as string }
+}
+
+const createUser = async (
+  env: LX.Env,
+  cookie: string,
+  name: string,
+  options: { maxSnapshotNum?: number } = {},
+) => {
+  const res = await adminApp.request(
+    '/api/admin/users',
+    {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        password: 'correct horse battery staple',
+        ...(options.maxSnapshotNum
+          ? { maxSnapshotNum: options.maxSnapshotNum }
+          : {}),
+      }),
+    },
+    env,
+  )
+  expect([201, 200]).toContain(res.status)
+}
+
+// The four KPI values the panel script builds its dashboard text from. Run
+// through the same kpiNumber exit the page uses, so this is the rendering rule
+// itself, not a second opinion about it.
+const kpiValues = async (env: LX.Env, cookie: string) => {
+  const usersRes = await adminApp.request(
+    '/api/admin/users',
+    { headers: { cookie } },
+    env,
+  )
+  expect(usersRes.status).toBe(200)
+  const { users } = (await usersRes.json()) as {
+    users: Array<{ deviceCount: number | null; status: string }>
+  }
+  const orphansRes = await adminApp.request(
+    '/api/admin/orphans',
+    { headers: { cookie } },
+    env,
+  )
+  expect(orphansRes.status).toBe(200)
+  const orphans = (await orphansRes.json()) as unknown[]
+  const kpiNumber = (value: number) => String(value)
+  return {
+    'kpi-users': kpiNumber(users.length),
+    'kpi-devices': kpiNumber(
+      users.reduce(
+        (total, user) =>
+          total +
+          (typeof user.deviceCount === 'number' &&
+          Number.isFinite(user.deviceCount)
+            ? user.deviceCount
+            : 0),
+        0,
+      ),
+    ),
+    'kpi-pending': kpiNumber(
+      users.filter((user) => user.status === 'pending').length,
+    ),
+    'kpi-orphans': kpiNumber(orphans.length),
+  }
+}
 
 const makeEnv = (hash?: string): LX.Env =>
   ({ LX_ADMIN_PASSWORD_HASH: hash }) as unknown as LX.Env
@@ -1376,13 +1460,17 @@ describe('admin theme switch and brand assets', () => {
     expect(dark).toContain('--lx-bg: #0e1116;')
     expect(dark).toContain('--lx-card: #1a1f26;')
     expect(dark).toContain('--lx-text: #e6e9ee;')
-    // The new control is painted from the same variables as every other input.
+    // The new control is painted from variables like every other input.
     expect(between('input, select {', 'input:focus')).toContain(
       'background: var(--lx-card)',
     )
+    // The pill is now a flush sunken capsule (rework should-fix 3): token
+    // paint, no hardcoded colour, and it must not grow taller than the
+    // buttons it sits beside.
     expect(between('.theme-switch {', '\n}')).toContain(
-      'background: var(--lx-card)',
+      'background: var(--lx-sunken)',
     )
+    expect(between('.theme-switch {', '\n}')).toContain('padding: 0;')
     expect(between('.theme-switch {', '\n}')).not.toContain('#')
   })
 
@@ -1885,5 +1973,235 @@ describe('responsive and motion contract', () => {
     expect(adminPageHtml).toContain(
       'grid-template-columns: repeat(2, minmax(0, 1fr));',
     )
+  })
+})
+
+describe('admin panel live-feedback fixes (ONE-164)', () => {
+  it('renders all four KPI values through one formatting exit (item 2)', async () => {
+    // Pama measured 用户总数 as bigger than the other three. The static markup
+    // is uniform, so the only thing that can diverge is the value path: every
+    // count now leaves renderHome through kpiNumber, and a live session proves
+    // the four values are the same shape (plain decimal digits) whatever the
+    // data.
+    expect(adminPageHtml).toContain('function kpiNumber(value)')
+    const renderHome = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderHome'),
+      adminPageHtml.indexOf('function renderTodo'),
+    )
+    for (const id of [
+      'kpi-users',
+      'kpi-devices',
+      'kpi-pending',
+      'kpi-orphans',
+    ]) {
+      expect(renderHome).toContain(`$('${id}').textContent`)
+    }
+    // Every KPI value — loaded or unknown — goes through one exit. Multi-line
+    // statements are folded so the check sees whole assignments.
+    const kpiLines = renderHome
+      .replace(/\s*\n\s*/g, ' ')
+      .split(/(?=\$\('kpi-)/)
+      .filter((part) => part.includes("$('kpi-"))
+      .join('\n')
+    for (const fragment of [
+      'kpiNumber(state.users.length)',
+      'kpiNumber(deviceTotal())',
+      'kpiNumber(pending)',
+      'kpiNumber(state.orphans.length)',
+    ]) {
+      expect(kpiLines).toContain(fragment)
+    }
+    expect(kpiLines).not.toMatch(/String\(/)
+
+    // Live evidence: a real session, three users (one pending), and the four
+    // values the page would print. All digits, one shape.
+    const password = 'live-kpi-evidence'
+    const hash = await sha256Hex(password)
+    const { env, cookie } = await loginAdmin(password, hash)
+    await createUser(env, cookie, 'ann-live')
+    await createUser(env, cookie, 'bob-live', { maxSnapshotNum: 5 })
+    await createUser(env, cookie, 'cy-live')
+    const values = await kpiValues(env, cookie)
+    expect(values).toEqual({
+      'kpi-users': '3',
+      'kpi-devices': '0',
+      'kpi-pending': '0',
+      'kpi-orphans': '0',
+    })
+    for (const value of Object.values(values)) {
+      expect(value).toMatch(/^\d+$/)
+    }
+  })
+
+  it('gives every control the shared control-height token (items 1, 4, 5, 6)', () => {
+    // Same slice helper as `page markup safety`, local to this block.
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    // 输入框 / 按钮 / 主题按钮走同一个控件高度 token；间距 token 不再被
+    // 当控件高度用，裸尺寸不再散落在页面里。
+    // The token declarations live only in tokens.ts; check the imported CSS.
+    expect(baseTokensCss).toContain('--lx-control-height: 36px;')
+    expect(baseTokensCss).toContain('--lx-control-tap: 48px;')
+    const inputRule = between('input, select {', 'input:focus')
+    expect(inputRule).toContain('min-height: var(--lx-control-height);')
+    expect(inputRule).not.toContain('--lx-space-8')
+    const btnRule = between('.btn {', 'btn:hover')
+    expect(btnRule).toContain('min-height: var(--lx-control-height);')
+    const themeRule = between('.theme-btn {', '.theme-btn:hover')
+    expect(themeRule).toContain('width: var(--lx-control-height);')
+    expect(themeRule).toContain('height: var(--lx-control-height);')
+    // 表单提交按钮与普通按钮同高（项 5），不再被撑到输入框旧高度。
+    expect(adminPageHtml).not.toContain(
+      '.form-actions .btn { min-height: var(--lx-space-8); }',
+    )
+    // 移动端触控高度（48px）继续走 token，不是裸值。
+    for (const tap of [
+      '.tab { min-height: var(--lx-control-tap); }',
+      '.modal-actions .btn { width: 100%; min-height: var(--lx-control-tap); }',
+    ]) {
+      expect(adminPageHtml).toContain(tap)
+    }
+    // The 40×40 hardcode and the 64px input are gone from the page.
+    expect(adminPageHtml).not.toContain('width: 40px; height: 40px;')
+    expect(adminPageHtml).not.toMatch(/input, select \{[^}]*--lx-space-8/)
+  })
+
+  it('labels every chart column with its date on hover, focus and tap (item 3)', () => {
+    // 纯 CSS tooltip：data-label + ::after，键盘 focus / 触屏点按都可见，
+    // 不新增脚本、不动 CSP。
+    expect(adminPageHtml).toContain('.chart-col::after {')
+    expect(adminPageHtml).toContain('content: attr(data-label);')
+    expect(adminPageHtml).toContain(
+      '.chart-col:hover::after, .chart-col:focus-visible::after',
+    )
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).toContain("column.setAttribute('data-label', label)")
+    expect(renderActivity).toContain("column.setAttribute('aria-label', label)")
+    expect(renderActivity).toContain(
+      "entry.key + ' · ' + kpiNumber(entry.count) + ' 人'",
+    )
+    // 键盘可达：柱条可聚焦（roving tabindex + 方向键），focus 同样弹提示。
+    const ensure = adminPageHtml.slice(
+      adminPageHtml.indexOf('function ensureChartColumns'),
+      adminPageHtml.indexOf('function renderActivity'),
+    )
+    expect(ensure).toContain('column.tabIndex = i === 0 ? 0 : -1')
+    expect(ensure).toContain("key !== 'ArrowLeft' && key !== 'ArrowRight'")
+    expect(ensure).toContain("column.setAttribute('role', 'img')")
+    // 稳定节点：刷新只改 data-label / 高度，不清空重建，焦点与提示不丢。
+    expect(renderActivity).not.toContain('clear(bars)')
+    expect(renderActivity).toContain('bars.children[i]')
+  })
+
+  it('keeps formatted output out of every logic comparison (rework family 1)', () => {
+    // 格式化出口只渲染展示，严禁参与数值/相等比较（评审打回 #2 的根因族）：
+    // kpiNumber() 返回字符串，与数字比较是死码（'0' === 0 恒 false）。
+    expect(adminPageHtml).toContain('function kpiNumber(value)')
+    expect(adminPageHtml).not.toMatch(
+      /kpiNumber\([^)]*\)\s*(===|==|!==|!=|>|<|>=|<=)/,
+    )
+    // 其余格式化工具同样不得参与比较。
+    for (const fn of [
+      'formatTime',
+      'summaryText',
+      'versionText',
+      'shortCommit',
+      'labelFrom',
+      'statusClass',
+    ]) {
+      expect(adminPageHtml).not.toMatch(
+        new RegExp(`${fn}\\([^)]*\\)\\s*(===|==|!==|!=)`),
+      )
+    }
+    // 计数逻辑比较一律用原始数值。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).toContain('series.total === 0')
+  })
+
+  it('keeps the chart tooltip anchored to its column (rework blocking 1)', () => {
+    // Same slice helper as `page markup safety`, local to this block.
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    // 绝对定位浮层必须有显式定位祖先，否则包含块退化到根视口（评审打回 #1）。
+    const chartCol = between('.chart-col {', '.chart-col:hover')
+    expect(chartCol).toContain('position: relative;')
+    const tooltip = between('.chart-col::after {', '.chart-col:hover::after')
+    expect(tooltip).toContain('position: absolute;')
+    // 定位规则实质断言：提示贴柱顶、横向居中于柱条。
+    expect(tooltip).toContain('bottom: calc(100% + var(--lx-space-1));')
+    expect(tooltip).toContain('left: 50%;')
+    expect(tooltip).toContain('transform: translateX(-50%);')
+    // 全页面扫描：每一个绝对/固定定位浮层都在一个显式定位的规则里（或自身）。
+    // 全套页面里的定位声明就这几处，逐一列明所属包含块。
+    const absCount = (adminPageHtml.match(/position: absolute;/g) ?? []).length
+    expect(absCount).toBe(3) // backdrop / tooltip / thead 视觉隐藏剪裁（非浮层）
+    expect(adminPageHtml).toContain('.modal { position: fixed; inset: 0;')
+    // backdrop 的包含块是 .modal（fixed），tooltip 的包含块是 .chart-col（relative），
+    // 剪裁规则是 1px 视觉隐藏（自身 absolute 定位，无浮层语义）。
+    expect(between('.modal-backdrop {', '\n}')).toContain('position: absolute;')
+  })
+
+  it('keeps the theme pill flush with the topbar button rhythm (rework should-fix 3)', () => {
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    // 外层胶囊不再加 padding+边框把自己撑高：整体高度就是按钮高度。
+    const pill = between('.theme-switch {', '\n}')
+    expect(pill).toContain('padding: 0;')
+    expect(pill).toContain('border: none;')
+    expect(pill).not.toContain('padding: var(')
+    // 按钮与 .btn 同一控件高度 token，无裸尺寸。
+    const themeRule = between('.theme-btn {', '.theme-btn:hover')
+    expect(themeRule).toContain('width: var(--lx-control-height);')
+    expect(themeRule).toContain('height: var(--lx-control-height);')
+  })
+
+  it('ships no local debug hooks in the production script (rework should-fix 4)', () => {
+    expect(adminPageHtml).not.toContain('saveView')
+    expect(adminPageHtml).not.toContain('globalThis.Deno')
+    // 渲染路径不得强制同步布局读取（getBoundingClientRect / getComputedStyle）。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    expect(renderActivity).not.toContain('getBoundingClientRect')
+    expect(renderActivity).not.toContain('getComputedStyle')
+  })
+
+  it('keeps the empty-chart copy reachable and the title fallback (rework nits 5/6)', () => {
+    // 空态文案：判断用原始数值，字符串输出只拼展示（实质断言：条件与分支配对）。
+    const renderActivity = adminPageHtml.slice(
+      adminPageHtml.indexOf('function renderActivity'),
+      adminPageHtml.indexOf('function buildVersion'),
+    )
+    const totalBlock = renderActivity.slice(
+      renderActivity.indexOf("$('chart-total').textContent"),
+    )
+    expect(totalBlock).toContain('series.total === 0')
+    expect(totalBlock).toContain("'近 30 天暂无新增'")
+    expect(totalBlock).toContain("'近 30 天新增 '")
+    // 触屏兜底：原生 title 与 ::after 提示并存。
+    expect(renderActivity).toContain('column.title = label')
+    expect(adminPageHtml).toContain('.chart-col::after {')
   })
 })

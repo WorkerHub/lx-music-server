@@ -7,6 +7,7 @@
 
 export const baseTokensCss = `:root {
   color-scheme: light;
+  /* 控件高度 token 在亮/暗两套下共用同一份声明，见 :root。 */
   --lx-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --lx-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --lx-text-display-size: 30px;
@@ -45,6 +46,10 @@ export const baseTokensCss = `:root {
   --lx-space-6: 32px;
   --lx-space-7: 48px;
   --lx-space-8: 64px;
+  /* 控件高度（项 1/4/5/6）：间距 scale 不能当控件高度用，输入框、按钮、
+     主题按钮统一走这两个 token。*/
+  --lx-control-height: 36px;
+  --lx-control-tap: 48px;
   --lx-brand: #157f4a;
   --lx-brand-hover: #11693d;
   --lx-brand-on: #ffffff;
@@ -102,6 +107,9 @@ const darkTokens = `
   --lx-raised: #222933;
   --lx-backdrop: #05070a;
   --lx-line: #2b323c;
+  /* Controls keep the regular control-height step in both themes: the control
+     tokens live in :root above and are shared, so the two palettes cannot
+     drift apart. */
   --lx-border-strong: #3d4550;
   --lx-muted: #98a2b3;
   --lx-text: #e6e9ee;
