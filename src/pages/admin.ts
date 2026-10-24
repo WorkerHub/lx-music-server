@@ -9,58 +9,44 @@
 // The client script deliberately avoids template literals and `${` so the
 // whole document can live in one outer template below.
 
+import { adminTokenCss } from '@/ui/tokens'
+
 const adminStyles = `
-:root {
-  color-scheme: light;
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --text: #1b1f24;
-  --muted: #667085;
-  --line: #e3e6ea;
-  --primary: #2563eb;
-  --primary-text: #ffffff;
-  --primary-soft: rgba(37, 99, 235, 0.12);
-  --danger: #d92d20;
-  --ok-bg: #ecfdf3;
-  --ok-text: #067647;
-  --warn-bg: #fffaeb;
-  --warn-text: #b54708;
-  --danger-bg: #fef3f2;
-  --danger-text: #b42318;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-}
-[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #111418;
-  --card: #1a1f26;
-  --text: #e6e9ee;
-  --muted: #98a2b3;
-  --line: #2b323c;
-  --primary: #3b82f6;
-  --primary-soft: rgba(59, 130, 246, 0.22);
-  --ok-bg: #0d2a1d;
-  --ok-text: #75e0a7;
-  --warn-bg: #2e2410;
-  --warn-text: #fec84b;
-  --danger-bg: #331715;
-  --danger-text: #fda29b;
-  --shadow: none;
-}
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+  background: var(--lx-bg);
+  color: var(--lx-text);
+  font-family: var(--lx-font-body);
+  font-size: var(--lx-text-body-size);
+  font-weight: var(--lx-text-body-weight);
+  line-height: var(--lx-text-body-lh);
+  letter-spacing: var(--lx-text-body-tracking);
 }
 body.modal-open { overflow: hidden; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
-.topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
-.topbar h1 { font-size: 20px; margin: 0 0 4px; }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: var(--lx-space-5) var(--lx-space-4) var(--lx-space-8); }
+
+/* --- Top bar: one brand row, then the page's working area ---------------- */
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lx-space-4);
+  margin-bottom: var(--lx-space-5);
+  padding-bottom: var(--lx-space-4);
+  border-bottom: 1px solid var(--lx-line);
+  flex-wrap: wrap;
+}
+.topbar h1 {
+  font-size: var(--lx-text-h1-size);
+  font-weight: var(--lx-text-h1-weight);
+  line-height: var(--lx-text-h1-lh);
+  letter-spacing: var(--lx-text-h1-tracking);
+  color: var(--lx-heading);
+  margin: 0 0 var(--lx-space-1);
+}
+.topbar-actions { display: flex; align-items: center; gap: var(--lx-space-2); flex-wrap: wrap; }
 /* 品牌块：logo 的垂直中线对齐 h1 大标题的中线，而不是「标题+副标题」整块。
    做法：h1 的行盒与 logo 等高（--brand-logo-size）后两者顶端对齐，两条中线
    自然重合；副标题排在 h1 之下，不参与 logo 定位。 */
@@ -70,76 +56,210 @@ body.modal-open { overflow: hidden; }
 /* 主题切换：三段式图标按钮组。图标用 currentColor 着色，亮/暗两套主题下
    都直接跟随文字色，因此不需要第二套图标配色。 */
 .theme-switch {
-  display: inline-flex; align-items: center; gap: 2px;
-  padding: 2px; border: 1px solid var(--line); border-radius: 8px;
-  background: var(--card);
+  display: inline-flex; align-items: center; gap: var(--lx-space-1);
+  padding: var(--lx-space-1); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm);
+  background: var(--lx-card);
 }
 .theme-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 24px; padding: 0;
-  border: 1px solid transparent; border-radius: 6px;
-  background: transparent; color: var(--muted); cursor: pointer;
+  width: 40px; height: 40px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--lx-radius-sm);
+  background: transparent; color: var(--lx-muted); cursor: pointer;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard);
 }
-.theme-btn:hover { color: var(--text); border-color: var(--line); }
+.theme-btn:hover { color: var(--lx-text); border-color: var(--lx-line); }
 .theme-btn[aria-pressed="true"] {
-  color: var(--primary); background: var(--primary-soft); border-color: var(--primary);
+  color: var(--lx-brand); background: var(--lx-brand-soft); border-color: var(--lx-brand);
 }
-.theme-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.theme-btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
 .theme-btn svg { display: block; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
-.tab {
-  border: none; background: transparent; color: var(--muted); font: inherit;
-  padding: 8px 12px; cursor: pointer; white-space: nowrap;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
+
+/* --- Tabs: label-grade type, brand underline for the active view --------- */
+.tabs {
+  display: flex; gap: var(--lx-space-1);
+  border-bottom: 1px solid var(--lx-line);
+  margin-bottom: var(--lx-space-5);
 }
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-.tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-h2 { font-size: 16px; margin: 0; }
-.muted { color: var(--muted); }
+.tab {
+  border: none; background: transparent; color: var(--lx-muted); font: inherit;
+  padding: var(--lx-space-2) var(--lx-space-3); cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-base) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard);
+}
+.tab:hover { color: var(--lx-text); background: var(--lx-sunken); }
+.tab:active { transform: translateY(1px); }
+.tab.active {
+  color: var(--lx-brand);
+  border-bottom-color: var(--lx-brand);
+  font-weight: var(--lx-text-label-weight);
+}
+.tab:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: -2px; }
+
+h2 {
+  font-size: var(--lx-text-h2-size);
+  font-weight: var(--lx-text-h2-weight);
+  line-height: var(--lx-text-h2-lh);
+  letter-spacing: var(--lx-text-h2-tracking);
+  color: var(--lx-heading);
+  margin: 0;
+}
+.eyebrow {
+  margin: 0 0 var(--lx-space-2);
+  color: var(--lx-brand);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  text-transform: uppercase;
+}
+.muted { color: var(--lx-muted); }
 .center { text-align: center; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
-.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.login-card { max-width: 420px; margin: 48px auto; }
-.stack { display: flex; flex-direction: column; gap: 12px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-weight: 600; }
+.card {
+  background: var(--lx-card);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-md);
+  padding: var(--lx-space-5);
+  box-shadow: var(--lx-shadow-1);
+}
+.card + .card, .kpi-grid + .card, .card + .kpi-grid { margin-top: var(--lx-space-4); }
+.card + .build-line { margin-top: var(--lx-space-5); }
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-space-3);
+  margin-bottom: var(--lx-space-4); padding-bottom: var(--lx-space-3);
+  border-bottom: 1px solid var(--lx-line);
+  flex-wrap: wrap;
+}
+.section-head .muted { font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
+.login-card { max-width: 420px; margin: var(--lx-space-7) auto; }
+.login-card .muted { font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); margin: var(--lx-space-1) 0 var(--lx-space-4); }
+.login-card .stack { gap: var(--lx-space-4); }
+.stack { display: flex; flex-direction: column; gap: var(--lx-space-3); }
+.field { display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.field-label {
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  color: var(--lx-heading);
+}
 input, select, button { font: inherit; }
 input, select {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--text);
+  min-height: var(--lx-space-8);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  border: 1px solid var(--lx-border-strong);
+  border-radius: var(--lx-radius-sm);
+  background: var(--lx-card);
+  color: var(--lx-text);
 }
-input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
-.hint { color: var(--muted); font-size: 12px; }
-.hint.warn { color: var(--warn-text); }
-.hint.ok { color: var(--ok-text); }
-.form-error { color: var(--danger-text); background: var(--danger-bg); border-radius: 8px; padding: 8px 10px; margin: 0; }
+input:focus, select:focus { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+input:disabled, select:disabled { opacity: 0.5; filter: saturate(0.4); cursor: not-allowed; }
+.hint {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-small-size);
+  font-weight: var(--lx-text-small-weight);
+  line-height: var(--lx-text-small-lh);
+  letter-spacing: var(--lx-text-small-tracking);
+}
+.hint.warn { color: var(--lx-warn-text); }
+.hint.ok { color: var(--lx-ok-text); }
+.form-error {
+  color: var(--lx-danger-text);
+  background: var(--lx-danger-bg);
+  border: 1px solid var(--lx-danger-border);
+  border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  margin: 0;
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+
+/* --- Buttons: one solid brand CTA, outlined secondaries, outlined danger -- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px;
-  background: var(--card); color: var(--text); cursor: pointer; white-space: nowrap;
+  min-height: calc(var(--lx-space-7) - var(--lx-space-3));
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3);
+  background: var(--lx-card); color: var(--lx-text); cursor: pointer; white-space: nowrap;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-crisp) var(--lx-ease-standard);
 }
-.btn:hover:not(:disabled) { border-color: var(--muted); }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
-.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn:hover:not(:disabled) { border-color: var(--lx-muted); background: var(--lx-sunken); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+.btn:disabled { opacity: 0.5; filter: saturate(0.4); cursor: not-allowed; }
+.btn[aria-busy="true"]::before {
+  content: '';
+  flex: none;
+  width: var(--lx-space-4);
+  height: var(--lx-space-4);
+  margin-right: var(--lx-space-2);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--lx-radius-full);
+  animation: lx-spin var(--lx-motion-spin) linear infinite;
+}
+@keyframes lx-spin { to { transform: rotate(360deg); } }
+.btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
+.btn.primary:hover:not(:disabled) { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
+/* Danger stays an outline everywhere: the dark palette's danger-text is a pale
+   coral that reads as a pale solid fill, so a filled danger button would look
+   inverted once the theme flips (Stage 2 review, ONE-145 nit 1). The status
+   color still marks the action, and the confirmation copy carries the meaning. */
+.btn.danger {
+  background: var(--lx-danger-bg);
+  border-color: var(--lx-danger-border);
+  color: var(--lx-danger-text);
+}
+.btn.danger:hover:not(:disabled) {
+  background: var(--lx-danger-bg);
+  border-color: var(--lx-danger-text);
+  color: var(--lx-danger-text);
+  box-shadow: inset 0 0 0 1px var(--lx-danger-text);
+}
+.btn.danger:active:not(:disabled) { background: var(--lx-danger-border); }
 .btn.ghost { background: transparent; }
-.btn.sm { padding: 4px 9px; font-size: 13px; }
-.grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+.btn.sm { padding: var(--lx-space-1) var(--lx-space-3); font-size: var(--lx-text-small-size); min-height: var(--lx-space-6); }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--lx-space-4); align-items: start; }
 .form-actions { display: flex; align-items: end; }
+.form-actions .btn { min-height: var(--lx-space-8); }
 .grid-form .form-error { grid-column: 1 / -1; }
+
+/* --- Tables -------------------------------------------------------------- */
 .table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td {
+  text-align: left;
+  padding: var(--lx-space-2) var(--lx-space-3);
+  border-bottom: 1px solid var(--lx-line);
+  vertical-align: top;
+}
+th {
+  font-size: var(--lx-text-label-size);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  color: var(--lx-muted);
+  font-weight: var(--lx-text-label-weight);
+  white-space: nowrap;
+}
 tbody tr:last-child td { border-bottom: none; }
-.name-cell { font-weight: 600; word-break: break-all; }
+.user-row { transition: background-color var(--lx-motion-fast) var(--lx-ease-standard); }
+.user-row:hover { background: var(--lx-sunken); }
+.name-cell {
+  font-weight: var(--lx-text-h3-weight);
+  color: var(--lx-heading);
+  word-break: break-all;
+}
 .actions-col { white-space: nowrap; }
-.row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }
+.row-actions { display: flex; gap: var(--lx-space-2); flex-wrap: nowrap; }
 /* 用户表专属布局：7 列全部左对齐；用户名列宽收缩到 18%，长用户名换行，富余宽度交给其余列。
    全部选择器都限定在 .users-table 内，残留数据表与弹窗按钮布局不受影响。 */
 .users-table { table-layout: auto; width: 100%; }
@@ -147,78 +267,401 @@ tbody tr:last-child td { border-bottom: none; }
 /* 用户名不再 width: 100% 吃满富余宽度：固定 18%、最小 160px，长名字换行而不是把表格撑宽。 */
 .users-table th:first-child, .users-table td:first-child { width: 18%; min-width: 160px; white-space: normal; }
 .users-table .row-actions { justify-content: flex-start; flex-wrap: nowrap; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg); color: var(--muted); }
-.badge.ok { background: var(--ok-bg); color: var(--ok-text); }
-.badge.warn { background: var(--warn-bg); color: var(--warn-text); }
-.badge.danger { background: var(--danger-bg); color: var(--danger-text); }
-.data-status { min-width: 210px; }
-.status-line { display: flex; gap: 6px; font-size: 13px; }
-.status-key { color: var(--muted); min-width: 36px; }
-.empty { color: var(--muted); padding: 12px 0 0; margin: 0; }
-.mode-options { display: grid; gap: 10px; }
-.mode-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
-.mode-option input { width: auto; margin-top: 3px; }
-.mode-option span { display: flex; flex-direction: column; gap: 2px; }
-.check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-.check input { width: auto; margin-top: 3px; }
-.notice { border-radius: 8px; padding: 9px 12px; margin-bottom: 14px; background: var(--bg); border: 1px solid var(--line); }
-.notice.ok { background: var(--ok-bg); color: var(--ok-text); border-color: transparent; }
-.notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
-.notice.err { background: var(--danger-bg); color: var(--danger-text); border-color: transparent; }
-.modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
-.modal-backdrop { position: absolute; inset: 0; background: rgba(16, 24, 40, 0.55); }
-.modal-card { position: relative; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; background: var(--card); border-radius: 12px; padding: 18px; box-shadow: 0 20px 40px rgba(16, 24, 40, 0.2); }
-.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.modal-desc { color: var(--muted); margin: 0 0 14px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-.icon-btn { border: none; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
-.icon-btn:hover { background: var(--bg); color: var(--text); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.kpi { margin-bottom: 0; display: flex; flex-direction: column; gap: 2px; }
-.kpi-label { color: var(--muted); font-size: 13px; }
-.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.25; }
-.todo-list { display: flex; flex-direction: column; gap: 8px; }
-.todo-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  width: 100%; text-align: left; font: inherit; cursor: pointer;
-  border: 1px solid var(--line); background: var(--bg); color: var(--text);
-  border-radius: 8px; padding: 10px 12px;
+
+/* --- Status badges: label type + state colour trio + text (never colour
+   alone) ---------------------------------------------------------------- */
+.badge {
+  display: inline-flex; align-items: center; gap: var(--lx-space-1);
+  padding: var(--lx-space-1) var(--lx-space-2);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-full);
+  font-size: var(--lx-text-label-size);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  font-weight: var(--lx-text-label-weight);
+  background: var(--lx-sunken);
+  color: var(--lx-muted);
+  white-space: nowrap;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard);
 }
-.todo-item:hover { border-color: var(--muted); }
-.todo-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.todo-arrow { color: var(--muted); }
+.badge::before {
+  content: '';
+  width: var(--lx-space-1);
+  height: var(--lx-space-1);
+  border-radius: var(--lx-radius-full);
+  background: currentColor;
+}
+.badge.ok { background: var(--lx-ok-bg); color: var(--lx-ok-text); border-color: var(--lx-ok-border); }
+/* Shape as well as hue: warn reads as a pill, danger as a ring, so the state
+   survives greyscale printing and colour-vision differences. */
+.badge.warn::before { width: var(--lx-space-2); height: var(--lx-space-1); }
+.badge.danger::before { background: transparent; border: 1px solid currentColor; }
+.badge.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
+.badge.danger { background: var(--lx-danger-bg); color: var(--lx-danger-text); border-color: var(--lx-danger-border); }
+
+.data-status { min-width: 210px; }
+.status-line {
+  display: flex; gap: var(--lx-space-2);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+  font-variant-numeric: tabular-nums;
+}
+.status-line + .status-line { margin-top: var(--lx-space-1); }
+.status-key {
+  color: var(--lx-muted);
+  min-width: 36px;
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  letter-spacing: var(--lx-text-label-tracking);
+}
+
+/* --- Empty / unknown / unavailable states --------------------------------
+   Each state says what is missing and what to do, in a slot that is designed
+   rather than a bare muted line (docs/design-system.md §7.2). */
+.empty {
+  display: flex; align-items: center; gap: var(--lx-space-3);
+  color: var(--lx-muted);
+  padding: var(--lx-space-4) 0 var(--lx-space-1);
+  margin: 0;
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+.empty::before {
+  content: '';
+  flex: none;
+  width: var(--lx-space-5);
+  height: var(--lx-space-5);
+  border: 1px dashed var(--lx-border-strong);
+  border-radius: var(--lx-radius-full);
+}
+.empty, .data-unavailable, .todo-unknown {
+  animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
+}
+@keyframes lx-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Boot / first-paint placeholder: a skeleton bar instead of a bare ellipsis,
+   so "loading" reads as a slot waiting for data rather than as content
+   (docs/design-system.md §7.2 loading). */
+#boot {
+  display: block;
+  width: 100%;
+  margin: var(--lx-space-7) 0;
+  text-align: center;
+}
+#boot::before {
+  content: '';
+  display: inline-block;
+  width: var(--lx-space-8);
+  height: var(--lx-space-3);
+  margin-right: var(--lx-space-2);
+  vertical-align: middle;
+  border-radius: var(--lx-radius-full);
+  background: var(--lx-sunken);
+}
+/* Unknown KPI values are quieter than real numbers: same slot, muted colour,
+   so a dash never competes with a metric that has actually loaded. */
+.kpi-value { color: var(--lx-heading); }
+.mode-options { display: grid; gap: var(--lx-space-3); }
+.mode-option {
+  display: flex; gap: var(--lx-space-3); align-items: flex-start;
+  padding: var(--lx-space-3);
+  border: 1px solid var(--lx-border-strong);
+  border-radius: var(--lx-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard);
+}
+.mode-option:hover { border-color: var(--lx-muted); background: var(--lx-sunken); }
+.mode-option:has(input:checked) {
+  border-color: var(--lx-brand);
+  background: var(--lx-brand-soft);
+}
+.mode-option:has(input:focus-visible) {
+  outline: 2px solid var(--lx-brand);
+  outline-offset: 2px;
+}
+.mode-option input { width: auto; min-height: 0; margin-top: 3px; }
+.mode-option span { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+.mode-option strong {
+  font-size: var(--lx-text-h3-size);
+  font-weight: var(--lx-text-h3-weight);
+  line-height: var(--lx-text-h3-lh);
+  letter-spacing: var(--lx-text-h3-tracking);
+  color: var(--lx-heading);
+}
+.mode-option .muted { font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
+.check { display: flex; gap: var(--lx-space-2); align-items: flex-start; cursor: pointer; }
+.check input { width: auto; min-height: 0; margin-top: 3px; }
+.check:has(input:focus-visible), .field:has(input:focus-visible), .field:has(select:focus-visible) {
+  outline: 2px solid var(--lx-brand);
+  outline-offset: 2px;
+}
+.notice {
+  border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  margin-bottom: var(--lx-space-4);
+  background: var(--lx-sunken);
+  border: 1px solid var(--lx-line);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+.notice.ok { background: var(--lx-ok-bg); color: var(--lx-ok-text); border-color: var(--lx-ok-border); }
+.notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
+.notice.err { background: var(--lx-danger-bg); color: var(--lx-danger-text); border-color: var(--lx-danger-border); }
+
+/* --- Modal --------------------------------------------------------------- */
+.modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: var(--lx-space-4); z-index: 20; }
+.modal[hidden] { display: none !important; }
+.modal-backdrop {
+  position: absolute; inset: 0; background: var(--lx-backdrop); opacity: 0.55;
+  animation: lx-fade var(--lx-motion-base) var(--lx-ease-standard) both;
+}
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--lx-raised);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-lg);
+  padding: var(--lx-space-5);
+  box-shadow: var(--lx-shadow-2);
+  animation: lx-modal-in var(--lx-motion-slow) var(--lx-ease-emphasized) both;
+}
+@keyframes lx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes lx-modal-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-3);
+  margin-bottom: var(--lx-space-3);
+  padding-bottom: var(--lx-space-3);
+  border-bottom: 1px solid var(--lx-line);
+}
+.modal-desc {
+  color: var(--lx-muted);
+  margin: 0 0 var(--lx-space-4);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+.modal-desc:empty { display: none; }
+.modal-actions {
+  display: flex; justify-content: flex-end; gap: var(--lx-space-2);
+  margin-top: var(--lx-space-5);
+  padding-top: var(--lx-space-4);
+  border-top: 1px solid var(--lx-line);
+}
+.icon-btn {
+  border: none; background: transparent; color: var(--lx-muted);
+  font-size: var(--lx-text-h1-size); line-height: 1; cursor: pointer;
+  padding: var(--lx-space-2); border-radius: var(--lx-radius-sm);
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    color var(--lx-motion-fast) var(--lx-ease-standard);
+}
+.icon-btn:hover { background: var(--lx-sunken); color: var(--lx-text); }
+.icon-btn:active { transform: scale(0.96); }
+.icon-btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+
+code {
+  font-family: var(--lx-font-mono);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-small-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-small-tracking);
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+
+/* --- Dashboard ----------------------------------------------------------- */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--lx-space-3); margin-bottom: var(--lx-space-4); }
+.kpi { margin-bottom: 0; display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.kpi-label {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+}
+.kpi-value {
+  font-size: var(--lx-text-display-size);
+  font-weight: var(--lx-text-display-weight);
+  line-height: var(--lx-text-display-lh);
+  letter-spacing: var(--lx-text-display-tracking);
+  color: var(--lx-heading);
+  font-variant-numeric: tabular-nums;
+}
+.todo-list { display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.todo-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-3);
+  width: 100%; text-align: left; font: inherit; cursor: pointer;
+  border: 1px solid var(--lx-line); background: var(--lx-sunken); color: var(--lx-text);
+  border-radius: var(--lx-radius-sm); padding: var(--lx-space-3);
+  transition:
+    background-color var(--lx-motion-fast) var(--lx-ease-standard),
+    border-color var(--lx-motion-fast) var(--lx-ease-standard),
+    transform var(--lx-motion-crisp) var(--lx-ease-standard);
+}
+.todo-item:hover { border-color: var(--lx-border-strong); background: var(--lx-card); }
+.todo-item:active { transform: scale(0.99); }
+.todo-item:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+.todo-arrow { color: var(--lx-brand); font-weight: var(--lx-text-label-weight); }
 .data-unavailable {
-  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
-  border-radius: 8px; color: var(--muted); background: var(--bg);
+  margin: 0; padding: var(--lx-space-3);
+  border: 1px dashed var(--lx-border-strong);
+  border-radius: var(--lx-radius-sm);
+  color: var(--lx-text);
+  background: var(--lx-sunken);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
 }
 .todo-unknown {
-  margin: 0; padding: 10px 12px; border: 1px dashed var(--line);
-  border-radius: 8px; color: var(--muted);
+  margin: 0; padding: var(--lx-space-3);
+  border: 1px dashed var(--lx-border-strong);
+  border-radius: var(--lx-radius-sm);
+  color: var(--lx-muted);
+  background: var(--lx-sunken);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
 }
-.chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 8px; }
-.chart-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
-.chart-bar { width: 100%; background: var(--primary); border-radius: 2px 2px 0 0; }
-.chart-bar.zero { background: var(--line); min-height: 2px; }
-.chart-range { margin: 6px 0 0; font-size: 12px; }
-.build-line { margin: 0; font-size: 12px; text-align: center; }
-.about-hero { display: flex; flex-direction: column; gap: 4px; }
-.about-hero h2 { font-size: 18px; }
+.chart {
+  display: flex; align-items: flex-end; gap: var(--lx-space-1);
+  height: 120px; padding-top: var(--lx-space-2);
+  font-variant-numeric: tabular-nums;
+}
+.chart-col {
+  flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end;
+  transition: opacity var(--lx-motion-fast) var(--lx-ease-standard);
+}
+.chart-col:hover { opacity: 0.72; }
+.chart-bar {
+  width: 100%; background: var(--lx-brand); border-radius: var(--lx-radius-sm) var(--lx-radius-sm) 0 0;
+  transition: height var(--lx-motion-base) var(--lx-ease-out);
+}
+.chart-bar.zero { background: var(--lx-line); min-height: 2px; }
+.chart-range { margin: var(--lx-space-2) 0 0; font-size: var(--lx-text-label-size); letter-spacing: var(--lx-text-label-tracking); }
+.build-line {
+  margin: 0; font-size: var(--lx-text-label-size); text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--lx-text-label-tracking);
+  font-family: var(--lx-font-mono);
+}
+
+/* --- About --------------------------------------------------------------- */
+.about-hero { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+.about-hero h2 { font-size: var(--lx-text-h2-size); }
 .about-list { margin: 0; }
-.about-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.about-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--lx-space-3);
+  align-items: baseline;
+  padding: var(--lx-space-2) 0;
+  border-bottom: 1px solid var(--lx-line);
+}
 .about-row:last-child { border-bottom: none; }
-.about-row dt { color: var(--muted); }
+.about-row dt {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  letter-spacing: var(--lx-text-label-tracking);
+}
 .about-row dd { margin: 0; word-break: break-all; }
-.about-row a { color: var(--primary); }
+.about-row a { color: var(--lx-brand); }
+
+/* --- Responsive: ≥1024 desktop, 641–1023 tablet, ≤640 mobile ------------- */
+@media (max-width: 1024px) {
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Narrow layouts turn every result set into cards: labels come from each
+   td[data-label], so the table stays semantic while the user no longer has to
+   scroll sideways to reach a value or an action. */
 @media (max-width: 640px) {
-  .wrap { padding: 16px 12px 48px; }
-  .card { padding: 14px; }
-  .tabs { flex-wrap: wrap; }
-  .actions-col { white-space: normal; }
-  .row-actions { flex-wrap: wrap; }
+  .wrap { padding: var(--lx-space-4) var(--lx-space-3) var(--lx-space-7); }
+  .topbar { gap: var(--lx-space-3); }
+  .topbar-actions { width: 100%; justify-content: space-between; }
+  .card { padding: var(--lx-space-4); }
+  .tabs {
+    overflow-x: auto; flex-wrap: nowrap; overscroll-behavior-x: contain;
+    scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+  }
+  .tab { min-height: var(--lx-space-8); }
+  .users-table, .users-table tbody, .users-table tr, .users-table td { display: block; width: 100%; }
+  .users-table thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .users-table tr {
+    margin-bottom: var(--lx-space-3); padding: var(--lx-space-3);
+    border: 1px solid var(--lx-line); border-radius: var(--lx-radius-md);
+    background: var(--lx-sunken);
+  }
+  .users-table tr:last-child { margin-bottom: 0; }
+  .users-table td {
+    display: grid; grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--lx-space-3); align-items: baseline;
+    padding: var(--lx-space-2) 0; border-bottom: 1px solid var(--lx-line);
+    white-space: normal; min-width: 0;
+  }
+  .users-table td::before {
+    content: attr(data-label);
+    color: var(--lx-muted);
+    font-size: var(--lx-text-label-size);
+    font-weight: var(--lx-text-label-weight);
+    letter-spacing: var(--lx-text-label-tracking);
+  }
+  .users-table td:first-child {
+    width: auto; min-width: 0; grid-template-columns: 1fr;
+    font-size: var(--lx-text-h3-size); line-height: var(--lx-text-h3-lh);
+    font-weight: var(--lx-text-h3-weight); color: var(--lx-heading);
+    padding-top: 0;
+  }
+  .users-table td:first-child::before { content: none; }
+  .users-table td:last-child {
+    display: block; border-bottom: none; padding-bottom: 0;
+  }
+  .users-table td:last-child::before {
+    display: block; margin-bottom: var(--lx-space-2);
+  }
+  .users-table .row-actions {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: nowrap; gap: var(--lx-space-2);
+  }
+  .users-table .row-actions .btn {
+    width: 100%; min-width: 0; min-height: var(--lx-space-8); white-space: normal;
+  }
+  .users-table .actions-col, .users-table .row-actions { white-space: normal; }
+  .data-status { min-width: 0; }
   .chart { height: 96px; }
-  .kpi-value { font-size: 22px; }
-  .about-row { grid-template-columns: 1fr; gap: 2px; }
+  .kpi-value { font-size: var(--lx-text-h1-size); }
+  .about-row { grid-template-columns: 1fr; gap: var(--lx-space-1); }
+  .modal { align-items: flex-end; padding: 0; }
+  .modal-card { max-width: none; max-height: 92vh; border-radius: var(--lx-radius-lg) var(--lx-radius-lg) 0 0; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; min-height: var(--lx-space-8); }
+  .grid-form { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:active:not(:disabled), .icon-btn:active, .todo-item:active, .tab:active {
+    transform: none;
+  }
 }
 `
 
@@ -323,8 +766,23 @@ const adminScript = `
   function button(label, className, handler) {
     var node = el('button', className || 'btn ghost', label)
     node.type = 'button'
-    node.addEventListener('click', handler)
+    node.addEventListener('click', function () {
+      handler(node)
+    })
     return node
+  }
+
+  function setBusy(node, busy) {
+    node.disabled = busy
+    node.setAttribute('aria-busy', busy ? 'true' : 'false')
+  }
+
+  // One shared escape target for every dynamic dialog: devices are loaded
+  // after openModal() returns, so a title is attached when the dialog already
+  // has a heading and the caller has not chosen one.
+  function ensureDialogLabel(container) {
+    if (!container || container.getAttribute('aria-labelledby')) return
+    container.setAttribute('aria-labelledby', 'modal-title')
   }
 
   function clear(node) {
@@ -605,6 +1063,12 @@ const adminScript = `
   // enterPanel) that started earlier: if a logout happens in between, the
   // whole chain becomes a no-op instead of repopulating a panel the user has
   // already left.
+  function cell(label, className, text) {
+    var node = el('td', className, text)
+    node.setAttribute('data-label', label)
+    return node
+  }
+
   async function loadUsers(epoch) {
     if (epoch === undefined) epoch = sessionEpoch
     var data
@@ -696,21 +1160,21 @@ const adminScript = `
     }
 
     state.users.forEach(function (user) {
-      var row = el('tr')
-      row.appendChild(el('td', 'name-cell', user.name))
+      var row = el('tr', 'user-row')
+      row.appendChild(cell('用户名', 'name-cell', user.name))
 
-      var statusCell = el('td')
+      var statusCell = cell('状态', 'status-cell')
       statusCell.appendChild(
         el('span', 'badge ' + statusClass(user.status), labelFrom(STATUS_LABELS, user.status))
       )
       row.appendChild(statusCell)
 
-      row.appendChild(el('td', null, labelFrom(SOURCE_LABELS, user.source)))
-      row.appendChild(el('td', 'muted', formatTime(user.createdAt)))
+      row.appendChild(cell('来源', null, labelFrom(SOURCE_LABELS, user.source)))
+      row.appendChild(cell('创建时间', 'muted', formatTime(user.createdAt)))
 
       var deviceCount = user.deviceCount
-      var deviceCell = el(
-        'td',
+      var deviceCell = cell(
+        '设备数',
         null,
         deviceCount === null || deviceCount === undefined ? '—' : String(deviceCount)
       )
@@ -718,8 +1182,8 @@ const adminScript = `
       row.appendChild(deviceCell)
 
       row.appendChild(
-        el(
-          'td',
+        cell(
+          '快照上限',
           null,
           user.maxSnapshotNum === undefined || user.maxSnapshotNum === null
             ? '默认'
@@ -727,7 +1191,7 @@ const adminScript = `
         )
       )
 
-      var actionCell = el('td', 'actions-col')
+      var actionCell = cell('操作', 'actions-col')
       var group = el('div', 'row-actions')
       addUserActions(group, user)
       actionCell.appendChild(group)
@@ -744,9 +1208,10 @@ const adminScript = `
 
     if (user.status === 'pending') {
       group.appendChild(
-        button('批准', 'btn primary sm', function () {
+        button('批准', 'btn primary sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/approve', { method: 'POST' })
             },
@@ -764,9 +1229,10 @@ const adminScript = `
 
     if (user.status === 'active') {
       group.appendChild(
-        button('禁用', 'btn ghost sm', function () {
+        button('禁用', 'btn ghost sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/disable', { method: 'POST' })
             },
@@ -777,9 +1243,10 @@ const adminScript = `
       )
     } else if (user.status === 'disabled') {
       group.appendChild(
-        button('启用', 'btn ghost sm', function () {
+        button('启用', 'btn ghost sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/enable', { method: 'POST' })
             },
@@ -811,9 +1278,12 @@ const adminScript = `
     )
   }
 
-  async function runAction(group, action, successText, overrides) {
+  async function runAction(group, trigger, action, successText, overrides) {
     var buttons = group.querySelectorAll('button')
-    for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true
+    for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i] === trigger) setBusy(buttons[i], true)
+      else buttons[i].disabled = true
+    }
     try {
       await action()
       notice(successText, 'ok')
@@ -823,7 +1293,7 @@ const adminScript = `
       var custom = overrides ? overrides[err.status] : ''
       notice(custom || messageFor(err), err.status === 502 ? 'warn' : 'err')
     } finally {
-      for (var j = 0; j < buttons.length; j++) buttons[j].disabled = false
+      for (var j = 0; j < buttons.length; j++) setBusy(buttons[j], false)
     }
   }
 
@@ -861,16 +1331,16 @@ const adminScript = `
     }
 
     state.orphans.forEach(function (orphan) {
-      var row = el('tr')
-      row.appendChild(el('td', 'name-cell', orphan.name))
-      row.appendChild(el('td', null, labelFrom(SOURCE_LABELS, orphan.source)))
-      row.appendChild(el('td', 'muted', formatTime(orphan.deletedAt)))
+      var row = el('tr', 'user-row')
+      row.appendChild(cell('用户名', 'name-cell', orphan.name))
+      row.appendChild(cell('来源', null, labelFrom(SOURCE_LABELS, orphan.source)))
+      row.appendChild(cell('删除时间', 'muted', formatTime(orphan.deletedAt)))
 
-      var statusCell = el('td', 'data-status')
+      var statusCell = cell('数据状态', 'data-status')
       renderDataStatus(statusCell, orphan.dataStatus)
       row.appendChild(statusCell)
 
-      var actionCell = el('td', 'actions-col')
+      var actionCell = cell('操作', 'actions-col')
       var group = el('div', 'row-actions')
       group.appendChild(
         button('恢复账号', 'btn primary sm', function () {
@@ -1019,9 +1489,9 @@ const adminScript = `
     empty.hidden = rows.length > 0
 
     rows.forEach(function (user) {
-      var row = el('tr')
-      row.appendChild(el('td', 'name-cell', user.name))
-      var statusCell = el('td')
+      var row = el('tr', 'user-row')
+      row.appendChild(cell('用户名', 'name-cell', user.name))
+      var statusCell = cell('状态', 'status-cell')
       statusCell.appendChild(
         el(
           'span',
@@ -1030,7 +1500,7 @@ const adminScript = `
         )
       )
       row.appendChild(statusCell)
-      row.appendChild(el('td', 'muted', formatTime(user.createdAt)))
+      row.appendChild(cell('创建时间', 'muted', formatTime(user.createdAt)))
       body.appendChild(row)
     })
   }
@@ -1202,6 +1672,7 @@ const adminScript = `
 
     var body = $('modal-body')
     clear(body)
+    ensureDialogLabel(body.parentNode)
     var fields = options.fields || []
     for (var i = 0; i < fields.length; i++) body.appendChild(fields[i])
 
@@ -1247,7 +1718,7 @@ const adminScript = `
     var cancel = $('modal-cancel')
     errorNode.hidden = true
     modalState.busy = true
-    submit.disabled = true
+    setBusy(submit, true)
     cancel.disabled = true
     try {
       var message = await submitFn()
@@ -1273,6 +1744,7 @@ const adminScript = `
     } finally {
       modalState.busy = false
       cancel.disabled = false
+      setBusy(submit, false)
       submit.disabled = modalState.onCanSubmit ? !modalState.onCanSubmit() : false
     }
   }
@@ -1576,20 +2048,20 @@ const adminScript = `
 
     var tbody = el('tbody')
     devices.forEach(function (device) {
-      var row = el('tr')
-      row.appendChild(el('td', null, device.deviceName || '未命名设备'))
-      row.appendChild(el('td', null, device.isMobile ? '手机' : '桌面'))
+      var row = el('tr', 'user-row')
+      row.appendChild(cell('设备名', null, device.deviceName || '未命名设备'))
+      row.appendChild(cell('类型', null, device.isMobile ? '手机' : '桌面'))
       row.appendChild(
-        el(
-          'td',
+        cell(
+          '最近连接',
           'muted',
           device.lastConnectDate ? formatTime(device.lastConnectDate) : '从未连接'
         )
       )
-      var idCell = el('td')
+      var idCell = cell('设备 ID')
       idCell.appendChild(el('code', null, device.clientId || ''))
       row.appendChild(idCell)
-      var actionCell = el('td')
+      var actionCell = cell('操作')
       actionCell.appendChild(
         button('删除', 'btn danger sm', function () {
           openDeleteDeviceModal(name, device)
@@ -1693,7 +2165,7 @@ const adminScript = `
         return
       }
       var submit = $('login-submit')
-      submit.disabled = true
+      setBusy(submit, true)
       try {
         await api('/api/admin/login', {
           method: 'POST',
@@ -1708,26 +2180,26 @@ const adminScript = `
         else errorNode.textContent = messageFor(err)
         errorNode.hidden = false
       } finally {
-        submit.disabled = false
+        setBusy(submit, false)
       }
     })
 
     $('refresh-btn').addEventListener('click', async function () {
       var node = this
-      node.disabled = true
+      setBusy(node, true)
       try {
         await Promise.all([loadUsers(), loadOrphans(), loadMode()])
         notice('已刷新', 'ok')
       } catch (err) {
         if (!handleAuth(err)) notice(messageFor(err), 'err')
       } finally {
-        node.disabled = false
+        setBusy(node, false)
       }
     })
 
     $('logout-btn').addEventListener('click', async function () {
       var node = this
-      node.disabled = true
+      setBusy(node, true)
       var loggedOut = false
       try {
         await api('/api/admin/logout', { method: 'POST' })
@@ -1736,7 +2208,7 @@ const adminScript = `
         if (err.status === 401) loggedOut = true
         else notice(messageFor(err), 'err')
       } finally {
-        node.disabled = false
+        setBusy(node, false)
       }
       if (!loggedOut) return
       notice('已退出登录', 'ok')
@@ -1776,7 +2248,7 @@ const adminScript = `
       }
 
       var submit = $('add-submit')
-      submit.disabled = true
+      setBusy(submit, true)
       try {
         await api('/api/admin/users', { method: 'POST', body: body })
         $('add-form').reset()
@@ -1794,7 +2266,7 @@ const adminScript = `
         else errorNode.textContent = messageFor(err)
         errorNode.hidden = false
       } finally {
-        submit.disabled = false
+        setBusy(submit, false)
       }
     })
 
@@ -1873,7 +2345,32 @@ const adminScript = `
     $('modal-submit').addEventListener('click', runModalSubmit)
     document.querySelector('.modal-backdrop').addEventListener('click', closeModal)
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && !$('modal').hidden) closeModal()
+      if (event.key === 'Escape' && !$('modal').hidden) {
+        closeModal()
+        return
+      }
+      if (event.key !== 'Tab' || $('modal').hidden || modalState.busy) return
+      // Keep keyboard focus inside the dialog while it is open. The rest of
+      // the panel is visually behind the backdrop but remains reachable by
+      // Tab, so one shared trap protects every modal, including dynamically
+      // loaded device lists.
+      var dialog = document.querySelector('.modal-card')
+      var focusable = dialog.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )
+      if (!focusable.length) return
+      var first = focusable[0]
+      var last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      } else if (!dialog.contains(document.activeElement)) {
+        event.preventDefault()
+        first.focus()
+      }
     })
   }
 
@@ -1935,6 +2432,7 @@ export const adminPageHtml = `<!doctype html>
 })()
 </script>
 <style>
+${adminTokenCss}
 ${adminStyles}
 </style>
 </head>
@@ -1989,6 +2487,7 @@ ${adminStyles}
   <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
 
   <section class="card login-card" id="login-view" hidden>
+    <p class="eyebrow">Admin · Sign in</p>
     <h2>管理员登录</h2>
     <p class="muted">管理面板与同步账号完全分离，请使用管理员密码登录。</p>
     <form class="stack" id="login-form" novalidate>

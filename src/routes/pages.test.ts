@@ -5,6 +5,7 @@ import { homePageHtml } from '@/pages/home'
 import { registerPageHtml } from '@/pages/register'
 import { updateSettings } from '@/registry/client'
 import { createTestEnv } from '@/test/registryEnv'
+import { BREAKPOINTS, baseTokensCss, darkTokensCss } from '@/ui/tokens'
 import app from './pages'
 
 const ADMIN_HASH = 'a'.repeat(64)
@@ -1347,16 +1348,18 @@ describe('admin theme switch and brand assets', () => {
 
     // 高亮态用主题变量（不写死颜色），亮/暗两套调色板各自提供它的底色。
     expect(between(':root {', '[data-theme="dark"] {')).toContain(
-      '--primary-soft:',
+      '--lx-brand-soft:',
     )
-    expect(between('[data-theme="dark"] {', '\n}')).toContain('--primary-soft:')
+    expect(between('[data-theme="dark"] {', '\n}')).toContain(
+      '--lx-brand-soft:',
+    )
     const pressed = between('.theme-btn[aria-pressed="true"] {', '\n}')
-    expect(pressed).toContain('color: var(--primary)')
-    expect(pressed).toContain('background: var(--primary-soft)')
-    expect(pressed).toContain('border-color: var(--primary)')
+    expect(pressed).toContain('color: var(--lx-brand)')
+    expect(pressed).toContain('background: var(--lx-brand-soft)')
+    expect(pressed).toContain('border-color: var(--lx-brand)')
     expect(pressed).not.toContain('#')
-    // 未选中态是灰字，两个主题下都从 --muted 取色。
-    expect(between('.theme-btn {', '\n}')).toContain('color: var(--muted)')
+    // 未选中态是灰字，两个主题下都从 --lx-muted 取色。
+    expect(between('.theme-btn {', '\n}')).toContain('color: var(--lx-muted)')
     // 图标不被全局 svg 规则撑开。
     expect(adminPageHtml).toContain('.theme-btn svg { display: block; }')
   })
@@ -1367,18 +1370,18 @@ describe('admin theme switch and brand assets', () => {
     expect(adminPageHtml).not.toContain('@media (prefers-color-scheme: dark)')
     const light = between(':root {', '[data-theme="dark"] {')
     expect(light).toContain('color-scheme: light;')
-    expect(light).toContain('--bg: #f4f5f7;')
+    expect(light).toContain('--lx-bg: #f6f7f9;')
     const dark = between('[data-theme="dark"] {', '\n}')
     expect(dark).toContain('color-scheme: dark;')
-    expect(dark).toContain('--bg: #111418;')
-    expect(dark).toContain('--card: #1a1f26;')
-    expect(dark).toContain('--text: #e6e9ee;')
+    expect(dark).toContain('--lx-bg: #0e1116;')
+    expect(dark).toContain('--lx-card: #1a1f26;')
+    expect(dark).toContain('--lx-text: #e6e9ee;')
     // The new control is painted from the same variables as every other input.
     expect(between('input, select {', 'input:focus')).toContain(
-      'background: var(--card)',
+      'background: var(--lx-card)',
     )
     expect(between('.theme-switch {', '\n}')).toContain(
-      'background: var(--card)',
+      'background: var(--lx-card)',
     )
     expect(between('.theme-switch {', '\n}')).not.toContain('#')
   })
@@ -1588,6 +1591,47 @@ describe('admin theme switch and brand assets', () => {
 })
 
 describe('admin panel layout and about page polish (WK-22)', () => {
+  it('keeps every state on the shared interaction language', () => {
+    // Motion and micro-interaction rules are tokenized in the frozen palette,
+    // so the page CSS only references those values. The reduced-motion block
+    // then keeps the state changes while dropping the transition process.
+    expect(adminPageHtml).toContain('transition-duration: 0.01ms !important;')
+    expect(adminPageHtml).toContain('animation-duration: 0.01ms !important;')
+    expect(adminPageHtml).toContain('.btn[aria-busy="true"]::before')
+    expect(adminPageHtml).toContain('filter: saturate(0.4)')
+    expect(adminPageHtml).toContain('.btn.danger:hover:not(:disabled)')
+    const runAction = adminPageHtml.slice(
+      adminPageHtml.indexOf('async function runAction'),
+      adminPageHtml.indexOf('function summaryText'),
+    )
+    expect(runAction).toContain(
+      'if (buttons[i] === trigger) setBusy(buttons[i], true)',
+    )
+    expect(runAction).toContain('else buttons[i].disabled = true')
+    expect(runAction).not.toContain(
+      'buttons.length; i++) setBusy(buttons[i], true)',
+    )
+    expect(adminPageHtml).toContain(
+      "event.key !== 'Tab' || $('modal').hidden || modalState.busy",
+    )
+    expect(adminPageHtml).toContain(
+      "var dialog = document.querySelector('.modal-card')",
+    )
+  })
+
+  it('turns the admin result sets into labelled cards below 640px', () => {
+    // The responsive contract requires labels that survive the semantic table
+    // being stacked into cards. The same helper feeds user rows, orphan rows,
+    // recent registrations and the device dialog.
+    expect(adminPageHtml).toContain('function cell(label, className, text)')
+    expect(adminPageHtml).toContain("node.setAttribute('data-label', label)")
+    expect(adminPageHtml).toContain("var row = el('tr', 'user-row')")
+    expect(adminPageHtml).toContain("cell('用户名'")
+    expect(adminPageHtml).toContain("cell('操作'")
+    expect(adminPageHtml).toContain('@media (max-width: 640px)')
+    expect(adminPageHtml).toContain('content: attr(data-label)')
+  })
+
   it('uses the "LX Music server 管理面板" wording for the page title and the about hero', () => {
     expect(adminPageHtml).toContain('<h1>LX Music server 管理面板</h1>')
     expect(adminPageHtml).not.toContain('<h1>LX Music 管理面板</h1>')
@@ -1633,9 +1677,10 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     // 7 列表头与内容均左对齐：用户表块内不再有右对齐规则。
     expect(usersTableCss).not.toContain('text-align: right')
     expect(usersTableCss).not.toContain('actions-col')
-    // 内边距不变，横向滚动容器保留。
+    // 内边距按 4px 阶梯（space-2 / space-3）令牌化，横向滚动容器保留。
+    expect(adminPageHtml).toContain('th, td {')
     expect(adminPageHtml).toContain(
-      'th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }',
+      'padding: var(--lx-space-2) var(--lx-space-3);',
     )
     expect(adminPageHtml).toContain('.table-wrap { overflow-x: auto; }')
     expect(adminPageHtml).toContain(
@@ -1644,7 +1689,7 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     // 全局 .actions-col / .row-actions 保持原样，残留数据表布局不变。
     expect(adminPageHtml).toContain('.actions-col { white-space: nowrap; }')
     expect(adminPageHtml).toContain(
-      '.row-actions { display: flex; gap: 6px; flex-wrap: nowrap; }',
+      '.row-actions { display: flex; gap: var(--lx-space-2); flex-wrap: nowrap; }',
     )
   })
 
@@ -1661,8 +1706,14 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     ]) {
       expect(adminPageHtml).toContain(`'${label}'`)
     }
-    expect(adminPageHtml).toContain("var actionCell = el('td', 'actions-col')")
+    expect(adminPageHtml).toContain(
+      "var actionCell = cell('操作', 'actions-col')",
+    )
     expect(adminPageHtml).toContain("var group = el('div', 'row-actions')")
+    // Responsive cards need a label source for each row cell; the label is
+    // also what a screen reader gets in the mobile card layout.
+    expect(adminPageHtml).toContain("node.setAttribute('data-label', label)")
+    expect(adminPageHtml).toContain("var row = el('tr', 'user-row')")
   })
 
   it('drops the debug leftovers from the about page', () => {
@@ -1736,5 +1787,103 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     for (const shortName of ['>lx-music-desktop</a>', '>lx-music-mobile</a>']) {
       expect(relatedRow).not.toContain(shortName)
     }
+  })
+})
+
+describe('responsive and motion contract', () => {
+  const styles = (html: string): string => {
+    const match = html.match(/<style>([\s\S]*?)<\/style>/)
+    expect(match).not.toBeNull()
+    return match![1]
+  }
+
+  it('keeps decorative layers out of hit testing on the SSR pages', () => {
+    for (const html of [homePageHtml('open'), registerPageHtml]) {
+      const css = styles(html)
+      const bodyBefore = css.slice(
+        css.indexOf('body::before'),
+        css.indexOf('.wrap'),
+      )
+      expect(bodyBefore).toContain('pointer-events: none;')
+    }
+  })
+
+  it('drops motion to instant states when the user asks for reduced motion', () => {
+    for (const [name, html] of pages) {
+      const css = styles(html)
+      expect(css, name).toContain('@media (prefers-reduced-motion: reduce)')
+      expect(css, name).toContain('animation-duration: 0.01ms !important;')
+      expect(css, name).toContain('transition-duration: 0.01ms !important;')
+    }
+  })
+
+  it('keeps every motion duration and easing on the shared tokens', () => {
+    for (const [name, html] of pages) {
+      const css = styles(html)
+      const reducedMotion = css.match(
+        /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*)$/,
+      )
+      expect(reducedMotion, `${name} reduced-motion block`).not.toBeNull()
+      const normalCss = css.slice(0, reducedMotion!.index)
+      // Scan shorthand declarations on every page, not only transition: a raw
+      // animation duration must fail even when an old assertion forgot it.
+      for (const declaration of normalCss.matchAll(
+        /(?:transition|animation)(?!-duration):\s*([^;]+);/g,
+      )) {
+        expect(declaration[1], `${name}: ${declaration[0]}`).not.toMatch(
+          /\b\d+(?:\.\d+)?m?s\b/,
+        )
+      }
+      expect(css, name).toContain('var(--lx-motion-')
+      expect(css, name).toContain('var(--lx-ease-')
+    }
+    expect(baseTokensCss).toContain('--lx-motion-crisp: 80ms;')
+    expect(baseTokensCss).toContain('--lx-ease-emphasized:')
+    for (const palette of [baseTokensCss, darkTokensCss]) {
+      expect(palette).toContain('--lx-motion-crisp: 80ms;')
+      expect(palette).toContain('--lx-ease-emphasized:')
+      expect(palette).toContain('--lx-motion-spin: 720ms;')
+    }
+    expect(adminPageHtml).toContain(
+      'animation: lx-modal-in var(--lx-motion-slow) var(--lx-ease-emphasized) both;',
+    )
+    for (const html of [registerPageHtml, adminPageHtml]) {
+      expect(html).toContain(
+        'animation: lx-spin var(--lx-motion-spin) linear infinite;',
+      )
+    }
+  })
+
+  it('keeps entry motion on outer containers and reduced-motion consistent', () => {
+    // Animation-fill-mode on a button would pin transform: translateY(0) and
+    // suppress its :active scale, so entry motion belongs to the outer wrap.
+    for (const html of [homePageHtml('open'), registerPageHtml]) {
+      const css = styles(html)
+      const wrap = css.match(/\.wrap \{([^}]*)\}/)
+      expect(wrap).not.toBeNull()
+      expect(wrap![1]).toContain(
+        'animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;',
+      )
+      expect(css.match(/@keyframes lx-fade-up/g)).toHaveLength(1)
+      expect(css).toContain('scroll-behavior: auto !important;')
+    }
+    const registerCss = styles(registerPageHtml)
+    expect(registerCss).not.toContain('.card, .field, .server-box, .btn')
+    expect(
+      homePageHtml('open').match(
+        /@media \(hover: hover\) \{\n {2}\.card:hover/g,
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('pins the three responsive ranges to the token source and page CSS', () => {
+    expect(BREAKPOINTS).toEqual({ sm: 640, md: 1024 })
+    for (const [name, html] of pages) {
+      expect(html, name).toContain('@media (max-width: 640px)')
+    }
+    expect(adminPageHtml).toContain('@media (max-width: 1024px)')
+    expect(adminPageHtml).toContain(
+      'grid-template-columns: repeat(2, minmax(0, 1fr));',
+    )
   })
 })
