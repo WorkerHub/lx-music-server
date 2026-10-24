@@ -73,6 +73,7 @@ describe('shared design tokens', () => {
       '--lx-radius-sm: 6px;',
       '--lx-radius-md: 10px;',
       '--lx-radius-lg: 14px;',
+      '--lx-radius-pill: 18px;',
       '--lx-radius-full: 999px;',
       '--lx-shadow-1:',
       '--lx-shadow-2:',
