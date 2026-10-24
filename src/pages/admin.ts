@@ -509,7 +509,7 @@ code {
 
 /* --- Dashboard ----------------------------------------------------------- */
 .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--lx-space-3); margin-bottom: var(--lx-space-4); }
-.kpi { margin-bottom: 0; display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.card.kpi { margin-top: 0; margin-bottom: 0; display: flex; flex-direction: column; gap: var(--lx-space-2); }
 .kpi-label {
   color: var(--lx-muted);
   font-size: var(--lx-text-label-size);
