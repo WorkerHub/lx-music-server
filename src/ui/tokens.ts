@@ -79,6 +79,7 @@ export const baseTokensCss = `:root {
   --lx-motion-fast: 120ms;
   --lx-motion-base: 200ms;
   --lx-motion-slow: 320ms;
+  --lx-motion-spin: 720ms;
   --lx-ease-standard: cubic-bezier(.2,.6,.3,1);
   --lx-ease-out: cubic-bezier(.16,1,.3,1);
   --lx-ease-emphasized: cubic-bezier(.22,1,.36,1);
@@ -120,6 +121,7 @@ const darkTokens = `
   --lx-motion-fast: 120ms;
   --lx-motion-base: 200ms;
   --lx-motion-slow: 320ms;
+  --lx-motion-spin: 720ms;
   --lx-ease-standard: cubic-bezier(.2,.6,.3,1);
   --lx-ease-out: cubic-bezier(.16,1,.3,1);
   --lx-ease-emphasized: cubic-bezier(.22,1,.36,1);

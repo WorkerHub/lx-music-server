@@ -1600,6 +1600,17 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     expect(adminPageHtml).toContain('.btn[aria-busy="true"]::before')
     expect(adminPageHtml).toContain('filter: saturate(0.4)')
     expect(adminPageHtml).toContain('.btn.danger:hover:not(:disabled)')
+    const runAction = adminPageHtml.slice(
+      adminPageHtml.indexOf('async function runAction'),
+      adminPageHtml.indexOf('function summaryText'),
+    )
+    expect(runAction).toContain(
+      'if (buttons[i] === trigger) setBusy(buttons[i], true)',
+    )
+    expect(runAction).toContain('else buttons[i].disabled = true')
+    expect(runAction).not.toContain(
+      'buttons.length; i++) setBusy(buttons[i], true)',
+    )
     expect(adminPageHtml).toContain(
       "event.key !== 'Tab' || $('modal').hidden || modalState.busy",
     )
@@ -1809,14 +1820,60 @@ describe('responsive and motion contract', () => {
   it('keeps every motion duration and easing on the shared tokens', () => {
     for (const [name, html] of pages) {
       const css = styles(html)
-      expect(css, name).not.toMatch(/transition:[^;]*\b\d+m?s\b/)
+      const reducedMotion = css.match(
+        /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*)$/,
+      )
+      expect(reducedMotion, `${name} reduced-motion block`).not.toBeNull()
+      const normalCss = css.slice(0, reducedMotion!.index)
+      // Scan shorthand declarations on every page, not only transition: a raw
+      // animation duration must fail even when an old assertion forgot it.
+      for (const declaration of normalCss.matchAll(
+        /(?:transition|animation)(?!-duration):\s*([^;]+);/g,
+      )) {
+        expect(declaration[1], `${name}: ${declaration[0]}`).not.toMatch(
+          /\b\d+(?:\.\d+)?m?s\b/,
+        )
+      }
       expect(css, name).toContain('var(--lx-motion-')
       expect(css, name).toContain('var(--lx-ease-')
     }
     expect(baseTokensCss).toContain('--lx-motion-crisp: 80ms;')
     expect(baseTokensCss).toContain('--lx-ease-emphasized:')
-    expect(darkTokensCss).toContain('--lx-motion-crisp: 80ms;')
-    expect(darkTokensCss).toContain('--lx-ease-emphasized:')
+    for (const palette of [baseTokensCss, darkTokensCss]) {
+      expect(palette).toContain('--lx-motion-crisp: 80ms;')
+      expect(palette).toContain('--lx-ease-emphasized:')
+      expect(palette).toContain('--lx-motion-spin: 720ms;')
+    }
+    expect(adminPageHtml).toContain(
+      'animation: lx-modal-in var(--lx-motion-slow) var(--lx-ease-emphasized) both;',
+    )
+    for (const html of [registerPageHtml, adminPageHtml]) {
+      expect(html).toContain(
+        'animation: lx-spin var(--lx-motion-spin) linear infinite;',
+      )
+    }
+  })
+
+  it('keeps entry motion on outer containers and reduced-motion consistent', () => {
+    // Animation-fill-mode on a button would pin transform: translateY(0) and
+    // suppress its :active scale, so entry motion belongs to the outer wrap.
+    for (const html of [homePageHtml('open'), registerPageHtml]) {
+      const css = styles(html)
+      const wrap = css.match(/\.wrap \{([^}]*)\}/)
+      expect(wrap).not.toBeNull()
+      expect(wrap![1]).toContain(
+        'animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;',
+      )
+      expect(css.match(/@keyframes lx-fade-up/g)).toHaveLength(1)
+      expect(css).toContain('scroll-behavior: auto !important;')
+    }
+    const registerCss = styles(registerPageHtml)
+    expect(registerCss).not.toContain('.card, .field, .server-box, .btn')
+    expect(
+      homePageHtml('open').match(
+        /@media \(hover: hover\) \{\n {2}\.card:hover/g,
+      ),
+    ).toHaveLength(1)
   })
 
   it('pins the three responsive ranges to the token source and page CSS', () => {

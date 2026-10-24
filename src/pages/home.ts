@@ -210,19 +210,6 @@ body::before {
    unmistakable against the ghost secondary below it. */
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
 .btn.primary:hover { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
-.card, .connect-strip {
-  transition:
-    border-color var(--lx-motion-fast) var(--lx-ease-standard),
-    box-shadow var(--lx-motion-fast) var(--lx-ease-standard),
-    transform var(--lx-motion-fast) var(--lx-ease-standard);
-}
-@media (hover: hover) {
-  .card:hover, .connect-strip:hover {
-    border-color: var(--lx-border-strong);
-    box-shadow: var(--lx-shadow-2);
-    transform: translateY(-1px);
-  }
-}
 .hint { color: var(--lx-muted); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); margin: 0; flex-basis: 100%; }
 .notice {
   margin: 0; flex-basis: 100%;
@@ -241,10 +228,6 @@ footer {
   color: var(--lx-muted);
   font-size: var(--lx-text-small-size);
   line-height: var(--lx-text-small-lh);
-}
-@keyframes lx-fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 @media (max-width: 640px) {
   .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }

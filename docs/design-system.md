@@ -220,6 +220,7 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 | `--lx-motion-fast` | 120ms | hover/active 反馈 |
 | `--lx-motion-base` | 200ms | 视图切换、tab、展开收起 |
 | `--lx-motion-slow` | 320ms | modal/toast 入场 |
+| `--lx-motion-spin` | 720ms | loading spinner 完整一圈 |
 | `--lx-ease-standard` | `cubic-bezier(.2,.6,.3,1)` | 默认 |
 | `--lx-ease-out` | `cubic-bezier(.16,1,.3,1)` | 入场（上浮/淡入） |
 | `--lx-ease-emphasized` | `cubic-bezier(.22,1,.36,1)` | modal、toast 入场强调 |

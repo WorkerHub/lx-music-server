@@ -33,7 +33,12 @@ body::before {
     radial-gradient(circle at 12% -10%, var(--lx-brand-soft), transparent 55%),
     radial-gradient(circle at 92% 8%, var(--lx-sunken), transparent 45%);
 }
-.wrap { max-width: 520px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
+.wrap {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8);
+  animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
+}
 .head { margin-bottom: var(--lx-space-5); }
 .eyebrow {
   margin: 0 0 var(--lx-space-2);
@@ -135,7 +140,7 @@ input:focus { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: var(--lx-radius-full);
-  animation: lx-spin 720ms linear infinite;
+  animation: lx-spin var(--lx-motion-spin) linear infinite;
 }
 @keyframes lx-spin { to { transform: rotate(360deg); } }
 /* Credential block: the success state of a registration is the pair the user
@@ -175,9 +180,6 @@ code {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.card, .field, .server-box, .btn {
-  animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
-}
 @media (max-width: 640px) {
   .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
   .card { padding: var(--lx-space-4); }
@@ -189,6 +191,7 @@ code {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
   .btn:active:not(:disabled) { transform: none; }
 }

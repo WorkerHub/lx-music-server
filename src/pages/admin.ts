@@ -205,7 +205,7 @@ input:disabled, select:disabled { opacity: 0.5; filter: saturate(0.4); cursor: n
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: var(--lx-radius-full);
-  animation: lx-spin 720ms linear infinite;
+  animation: lx-spin var(--lx-motion-spin) linear infinite;
 }
 @keyframes lx-spin { to { transform: rotate(360deg); } }
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
@@ -433,7 +433,7 @@ tbody tr:last-child td { border-bottom: none; }
   border-radius: var(--lx-radius-lg);
   padding: var(--lx-space-5);
   box-shadow: var(--lx-shadow-2);
-  animation: lx-modal-in var(--lx-motion-slow) var(--lx-ease-out) both;
+  animation: lx-modal-in var(--lx-motion-slow) var(--lx-ease-emphasized) both;
 }
 @keyframes lx-fade {
   from { opacity: 0; }
@@ -766,7 +766,9 @@ const adminScript = `
   function button(label, className, handler) {
     var node = el('button', className || 'btn ghost', label)
     node.type = 'button'
-    node.addEventListener('click', handler)
+    node.addEventListener('click', function () {
+      handler(node)
+    })
     return node
   }
 
@@ -1206,9 +1208,10 @@ const adminScript = `
 
     if (user.status === 'pending') {
       group.appendChild(
-        button('批准', 'btn primary sm', function () {
+        button('批准', 'btn primary sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/approve', { method: 'POST' })
             },
@@ -1226,9 +1229,10 @@ const adminScript = `
 
     if (user.status === 'active') {
       group.appendChild(
-        button('禁用', 'btn ghost sm', function () {
+        button('禁用', 'btn ghost sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/disable', { method: 'POST' })
             },
@@ -1239,9 +1243,10 @@ const adminScript = `
       )
     } else if (user.status === 'disabled') {
       group.appendChild(
-        button('启用', 'btn ghost sm', function () {
+        button('启用', 'btn ghost sm', function (trigger) {
           runAction(
             group,
+            trigger,
             function () {
               return api('/api/admin/users/' + encoded + '/enable', { method: 'POST' })
             },
@@ -1273,9 +1278,12 @@ const adminScript = `
     )
   }
 
-  async function runAction(group, action, successText, overrides) {
+  async function runAction(group, trigger, action, successText, overrides) {
     var buttons = group.querySelectorAll('button')
-    for (var i = 0; i < buttons.length; i++) setBusy(buttons[i], true)
+    for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i] === trigger) setBusy(buttons[i], true)
+      else buttons[i].disabled = true
+    }
     try {
       await action()
       notice(successText, 'ok')
