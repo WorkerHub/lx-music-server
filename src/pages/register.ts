@@ -7,90 +7,61 @@
 // client script avoids template literals so the document can live in one outer
 // template.
 
+import { ssrTokenCss } from '@/ui/tokens'
+
 const registerStyles = `
-:root {
-  color-scheme: light dark;
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --text: #1b1f24;
-  --muted: #667085;
-  --line: #e3e6ea;
-  --primary: #2563eb;
-  --primary-text: #ffffff;
-  --ok-bg: #ecfdf3;
-  --ok-text: #067647;
-  --warn-bg: #fffaeb;
-  --warn-text: #b54708;
-  --danger-bg: #fef3f2;
-  --danger-text: #b42318;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111418;
-    --card: #1a1f26;
-    --text: #e6e9ee;
-    --muted: #98a2b3;
-    --line: #2b323c;
-    --primary: #3b82f6;
-    --ok-bg: #0d2a1d;
-    --ok-text: #75e0a7;
-    --warn-bg: #2e2410;
-    --warn-text: #fec84b;
-    --danger-bg: #331715;
-    --danger-text: #fda29b;
-    --shadow: none;
-  }
-}
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+  background: var(--lx-bg);
+  color: var(--lx-text);
+  font-family: var(--lx-font-body);
+  font-size: var(--lx-text-body-size);
+  font-weight: var(--lx-text-body-weight);
+  line-height: var(--lx-text-body-lh);
+  letter-spacing: var(--lx-text-body-tracking);
 }
-.wrap { max-width: 520px; margin: 0 auto; padding: 48px 16px 64px; }
-.head { margin-bottom: 18px; }
-.head h1 { font-size: 20px; margin: 0 0 4px; }
-h2 { font-size: 17px; margin: 0 0 10px; }
-.muted { color: var(--muted); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px; box-shadow: var(--shadow); }
-.stack { display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-weight: 600; }
+.wrap { max-width: 520px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
+.head { margin-bottom: var(--lx-space-5); }
+.head h1 { font-size: var(--lx-text-h1-size); font-weight: var(--lx-text-h1-weight); line-height: var(--lx-text-h1-lh); letter-spacing: var(--lx-text-h1-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-1); }
+h2 { font-size: var(--lx-text-h2-size); font-weight: var(--lx-text-h2-weight); line-height: var(--lx-text-h2-lh); letter-spacing: var(--lx-text-h2-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-3); }
+.muted { color: var(--lx-muted); }
+.card { background: var(--lx-card); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-md); padding: var(--lx-space-5); box-shadow: var(--lx-shadow-1); }
+.stack { display: flex; flex-direction: column; gap: var(--lx-space-4); }
+.field { display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.field-label { font-size: var(--lx-text-label-size); font-weight: var(--lx-text-label-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-label-tracking); }
 input, button { font: inherit; }
 input {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--text);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  border: 1px solid var(--lx-border-strong);
+  border-radius: var(--lx-radius-sm);
+  background: var(--lx-card);
+  color: var(--lx-text);
 }
-input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
-.hint { color: var(--muted); font-size: 12px; }
-.hint.warn { color: var(--warn-text); }
-.hint.ok { color: var(--ok-text); }
-.form-error { color: var(--danger-text); background: var(--danger-bg); border-radius: 8px; padding: 8px 10px; margin: 0; }
-.notice { border-radius: 8px; padding: 9px 12px; margin: 0; background: var(--bg); border: 1px solid var(--line); color: var(--text); }
-.notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
-.notice.ok { background: var(--ok-bg); color: var(--ok-text); border-color: transparent; }
+input:focus { outline: 2px solid var(--lx-brand); outline-offset: 1px; }
+.hint { color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); }
+.hint.warn { color: var(--lx-warn-text); }
+.hint.ok { color: var(--lx-ok-text); }
+.form-error { color: var(--lx-danger-text); background: var(--lx-danger-bg); border: 1px solid var(--lx-danger-border); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3); margin: 0; }
+.notice { border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3); margin: 0; background: var(--lx-bg); border: 1px solid var(--lx-line); color: var(--lx-text); }
+.notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
+.notice.ok { background: var(--lx-ok-bg); color: var(--lx-ok-text); border-color: var(--lx-ok-border); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
-  background: var(--card); color: var(--text); cursor: pointer;
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-4);
+  background: var(--lx-card); color: var(--lx-text); cursor: pointer;
 }
-.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:hover:not(:disabled) { border-color: var(--lx-muted); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+.btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
+.btn.primary:hover:not(:disabled) { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
 .btn.ghost { background: transparent; }
-.server-box { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 14px 0 10px; }
-.server-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.server-key { color: var(--muted); }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
+.server-box { background: var(--lx-sunken); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm); padding: var(--lx-space-3); margin: var(--lx-space-4) 0 var(--lx-space-3); }
+.server-row { display: flex; gap: var(--lx-space-3); align-items: baseline; flex-wrap: wrap; }
+.server-key { color: var(--lx-muted); }
+code { font-family: var(--lx-font-mono); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); font-variant-numeric: tabular-nums; word-break: break-all; }
 `
 
 const registerScript = `
@@ -282,6 +253,7 @@ export const registerPageHtml = `<!doctype html>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <title>注册 · LX Music Server</title>
 <style>
+${ssrTokenCss}
 ${registerStyles}
 </style>
 </head>

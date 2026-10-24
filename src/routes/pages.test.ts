@@ -1347,16 +1347,18 @@ describe('admin theme switch and brand assets', () => {
 
     // 高亮态用主题变量（不写死颜色），亮/暗两套调色板各自提供它的底色。
     expect(between(':root {', '[data-theme="dark"] {')).toContain(
-      '--primary-soft:',
+      '--lx-brand-soft:',
     )
-    expect(between('[data-theme="dark"] {', '\n}')).toContain('--primary-soft:')
+    expect(between('[data-theme="dark"] {', '\n}')).toContain(
+      '--lx-brand-soft:',
+    )
     const pressed = between('.theme-btn[aria-pressed="true"] {', '\n}')
-    expect(pressed).toContain('color: var(--primary)')
-    expect(pressed).toContain('background: var(--primary-soft)')
-    expect(pressed).toContain('border-color: var(--primary)')
+    expect(pressed).toContain('color: var(--lx-brand)')
+    expect(pressed).toContain('background: var(--lx-brand-soft)')
+    expect(pressed).toContain('border-color: var(--lx-brand)')
     expect(pressed).not.toContain('#')
-    // 未选中态是灰字，两个主题下都从 --muted 取色。
-    expect(between('.theme-btn {', '\n}')).toContain('color: var(--muted)')
+    // 未选中态是灰字，两个主题下都从 --lx-muted 取色。
+    expect(between('.theme-btn {', '\n}')).toContain('color: var(--lx-muted)')
     // 图标不被全局 svg 规则撑开。
     expect(adminPageHtml).toContain('.theme-btn svg { display: block; }')
   })
@@ -1367,18 +1369,18 @@ describe('admin theme switch and brand assets', () => {
     expect(adminPageHtml).not.toContain('@media (prefers-color-scheme: dark)')
     const light = between(':root {', '[data-theme="dark"] {')
     expect(light).toContain('color-scheme: light;')
-    expect(light).toContain('--bg: #f4f5f7;')
+    expect(light).toContain('--lx-bg: #f6f7f9;')
     const dark = between('[data-theme="dark"] {', '\n}')
     expect(dark).toContain('color-scheme: dark;')
-    expect(dark).toContain('--bg: #111418;')
-    expect(dark).toContain('--card: #1a1f26;')
-    expect(dark).toContain('--text: #e6e9ee;')
+    expect(dark).toContain('--lx-bg: #0e1116;')
+    expect(dark).toContain('--lx-card: #1a1f26;')
+    expect(dark).toContain('--lx-text: #e6e9ee;')
     // The new control is painted from the same variables as every other input.
     expect(between('input, select {', 'input:focus')).toContain(
-      'background: var(--card)',
+      'background: var(--lx-card)',
     )
     expect(between('.theme-switch {', '\n}')).toContain(
-      'background: var(--card)',
+      'background: var(--lx-card)',
     )
     expect(between('.theme-switch {', '\n}')).not.toContain('#')
   })
@@ -1635,7 +1637,7 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     expect(usersTableCss).not.toContain('actions-col')
     // 内边距不变，横向滚动容器保留。
     expect(adminPageHtml).toContain(
-      'th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }',
+      'th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--lx-line); vertical-align: top; }',
     )
     expect(adminPageHtml).toContain('.table-wrap { overflow-x: auto; }')
     expect(adminPageHtml).toContain(

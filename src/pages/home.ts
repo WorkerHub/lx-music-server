@@ -10,87 +10,69 @@
 // Nothing user-controlled is interpolated: the only input is the enum above,
 // and it is only branched on, never written into the markup.
 
+import { ssrTokenCss } from '@/ui/tokens'
+
 const homeStyles = `
-:root {
-  color-scheme: light dark;
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --text: #1b1f24;
-  --muted: #667085;
-  --line: #e3e6ea;
-  --primary: #2563eb;
-  --primary-text: #ffffff;
-  --warn-bg: #fffaeb;
-  --warn-text: #b54708;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111418;
-    --card: #1a1f26;
-    --text: #e6e9ee;
-    --muted: #98a2b3;
-    --line: #2b323c;
-    --primary: #3b82f6;
-    --warn-bg: #2e2410;
-    --warn-text: #fec84b;
-    --shadow: none;
-  }
-}
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
+  background: var(--lx-bg);
+  color: var(--lx-text);
+  font-family: var(--lx-font-body);
+  font-size: var(--lx-text-body-size);
+  font-weight: var(--lx-text-body-weight);
+  line-height: var(--lx-text-body-lh);
+  letter-spacing: var(--lx-text-body-tracking);
 }
-.wrap { max-width: 640px; margin: 0 auto; padding: 56px 16px 64px; }
-.brand { display: flex; align-items: center; gap: 14px; }
+.wrap { max-width: 640px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
+.brand { display: flex; align-items: center; gap: var(--lx-space-4); }
 .brand svg { flex: none; }
-.brand h1 { font-size: 24px; line-height: 1.25; margin: 0 0 2px; }
-.muted { color: var(--muted); }
-.lead { margin: 16px 0 0; font-size: 15px; }
+.brand h1 { font-size: var(--lx-text-h1-size); font-weight: var(--lx-text-h1-weight); line-height: var(--lx-text-h1-lh); letter-spacing: var(--lx-text-h1-tracking); color: var(--lx-heading); margin: 0; }
+.muted { color: var(--lx-muted); }
+.lead { margin: var(--lx-space-4) 0 0; font-size: var(--lx-text-h3-size); font-weight: var(--lx-text-h3-weight); line-height: var(--lx-text-h3-lh); letter-spacing: var(--lx-text-h3-tracking); }
 .card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 20px;
-  margin-top: 24px;
-  box-shadow: var(--shadow);
+  background: var(--lx-card);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-md);
+  padding: var(--lx-space-5);
+  margin-top: var(--lx-space-5);
+  box-shadow: var(--lx-shadow-1);
 }
-.card h2 { font-size: 15px; margin: 0 0 12px; }
-.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.features li { display: flex; gap: 8px; }
-.features .mark { color: var(--primary); flex: none; }
+.card h2 { font-size: var(--lx-text-h2-size); font-weight: var(--lx-text-h2-weight); line-height: var(--lx-text-h2-lh); letter-spacing: var(--lx-text-h2-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-3); }
+.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.features li { display: flex; gap: var(--lx-space-2); }
+.features .mark { color: var(--lx-brand); flex: none; }
 .actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+  gap: var(--lx-space-3);
+  margin-top: var(--lx-space-5);
+  padding-top: var(--lx-space-4);
+  border-top: 1px solid var(--lx-line);
 }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
-  background: var(--card); color: var(--text);
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-4);
+  background: var(--lx-card); color: var(--lx-text);
   text-decoration: none; font: inherit;
 }
-.btn:hover { border-color: var(--muted); }
-.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
-.btn.primary:hover { border-color: var(--primary); }
-.hint { color: var(--muted); font-size: 12px; margin: 0; flex-basis: 100%; }
+.btn:hover { border-color: var(--lx-muted); }
+.btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
+.btn.primary:hover { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
+.btn.primary:hover { border-color: var(--lx-brand); }
+.hint { color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); margin: 0; flex-basis: 100%; }
 .notice {
   margin: 0; flex-basis: 100%;
-  border-radius: 8px; padding: 9px 12px;
-  background: var(--bg); border: 1px solid var(--line); color: var(--text);
-  font-size: 13px;
+  border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3);
+  background: var(--lx-bg); border: 1px solid var(--lx-line); color: var(--lx-text);
+  font-size: var(--lx-text-small-size);
+  font-weight: var(--lx-text-small-weight);
+  line-height: var(--lx-text-small-lh);
+  letter-spacing: var(--lx-text-small-tracking);
 }
-.notice.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
-footer { margin-top: 28px; color: var(--muted); font-size: 12px; }
+.notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
+footer { margin-top: var(--lx-space-6); color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); }
 `
 
 const brandLogo = `<svg viewBox="0 0 447.942 447.943" width="40" height="40" aria-hidden="true" focusable="false">
@@ -128,6 +110,7 @@ export const homePageHtml = (
 <link rel="icon" href="/favicon.ico" sizes="any">
 <title>LX Music Server · 同步服务</title>
 <style>
+${ssrTokenCss}
 ${homeStyles}
 </style>
 </head>
