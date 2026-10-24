@@ -56,11 +56,22 @@ body.modal-open { overflow: hidden; }
 /* 主题切换：三段式图标按钮组。图标用 currentColor 着色，亮/暗两套主题下
    都直接跟随文字色，因此不需要第二套图标配色。按钮尺寸走控件高度 token
    （与 .btn / input 同一节奏），不在页面里写裸尺寸（项 6）。外层容器去掉
-   内边距与边框、只用圆角背景区分分组，整体高度与 .btn 顶栏节奏一致。 */
+   内边距与边框、只用圆角背景区分分组，整体高度与 .btn 顶栏节奏一致。
+   首/末段按钮的外侧角与容器同为 --lx-radius-full：激活高亮块落到端部
+   段位时外侧弧与胶囊外轮廓重合，四角弧度不再不对称（不用容器剪裁，
+   以免剪掉端部按钮的 focus-visible 外描边）。 */
 .theme-switch {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
   padding: 0; border: none; border-radius: var(--lx-radius-full);
   background: var(--lx-sunken);
+}
+.theme-btn:first-child {
+  border-top-left-radius: var(--lx-radius-full);
+  border-bottom-left-radius: var(--lx-radius-full);
+}
+.theme-btn:last-child {
+  border-top-right-radius: var(--lx-radius-full);
+  border-bottom-right-radius: var(--lx-radius-full);
 }
 .theme-btn {
   display: inline-flex; align-items: center; justify-content: center;
