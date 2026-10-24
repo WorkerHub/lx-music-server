@@ -9,6 +9,12 @@
 //
 // Nothing user-controlled is interpolated: the only input is the enum above,
 // and it is only branched on, never written into the markup.
+//
+// Layout notes (docs/design-system.md §0/§8): one 640px column, a hero whose
+// headline carries the page, then one card per idea with a deliberate
+// whitespace rhythm (space-7 header → hero → space-6 → cards). The connection
+// strip is the "credential block" the design contract calls the signature
+// element: monospaced, tabular figures, self-explanatory without a script.
 
 import { ssrTokenCss } from '@/ui/tokens'
 
@@ -24,24 +30,128 @@ body {
   line-height: var(--lx-text-body-lh);
   letter-spacing: var(--lx-text-body-tracking);
 }
+/* Subtle brand presence behind the hero: two blurred brand-soft blobs, pure
+   CSS (CSP keeps every other decoration out). They sit behind the content and
+   never affect layout. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 12% -10%, var(--lx-brand-soft), transparent 55%),
+    radial-gradient(circle at 92% 8%, var(--lx-sunken), transparent 45%);
+}
 .wrap { max-width: 640px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
 .brand { display: flex; align-items: center; gap: var(--lx-space-4); }
 .brand svg { flex: none; }
-.brand h1 { font-size: var(--lx-text-h1-size); font-weight: var(--lx-text-h1-weight); line-height: var(--lx-text-h1-lh); letter-spacing: var(--lx-text-h1-tracking); color: var(--lx-heading); margin: 0; }
+.brand-name { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+.brand h1 {
+  font-size: var(--lx-text-h1-size);
+  font-weight: var(--lx-text-h1-weight);
+  line-height: var(--lx-text-h1-lh);
+  letter-spacing: var(--lx-text-h1-tracking);
+  color: var(--lx-heading);
+  margin: 0;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--lx-brand);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  text-transform: uppercase;
+}
 .muted { color: var(--lx-muted); }
-.lead { margin: var(--lx-space-4) 0 0; font-size: var(--lx-text-h3-size); font-weight: var(--lx-text-h3-weight); line-height: var(--lx-text-h3-lh); letter-spacing: var(--lx-text-h3-tracking); }
+.lead {
+  margin: var(--lx-space-4) 0 0;
+  font-size: var(--lx-text-h3-size);
+  font-weight: var(--lx-text-h3-weight);
+  line-height: var(--lx-text-h3-lh);
+  letter-spacing: var(--lx-text-h3-tracking);
+}
+.hero { margin-bottom: var(--lx-space-6); }
+.hero .display {
+  margin: var(--lx-space-3) 0 0;
+  font-size: var(--lx-text-display-size);
+  font-weight: var(--lx-text-display-weight);
+  line-height: var(--lx-text-display-lh);
+  letter-spacing: var(--lx-text-display-tracking);
+  color: var(--lx-heading);
+}
 .card {
   background: var(--lx-card);
   border: 1px solid var(--lx-line);
   border-radius: var(--lx-radius-md);
   padding: var(--lx-space-5);
-  margin-top: var(--lx-space-5);
   box-shadow: var(--lx-shadow-1);
 }
-.card h2 { font-size: var(--lx-text-h2-size); font-weight: var(--lx-text-h2-weight); line-height: var(--lx-text-h2-lh); letter-spacing: var(--lx-text-h2-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-3); }
-.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--lx-space-2); }
-.features li { display: flex; gap: var(--lx-space-2); }
-.features .mark { color: var(--lx-brand); flex: none; }
+.card + .card { margin-top: var(--lx-space-4); }
+.card h2 {
+  font-size: var(--lx-text-h2-size);
+  font-weight: var(--lx-text-h2-weight);
+  line-height: var(--lx-text-h2-lh);
+  letter-spacing: var(--lx-text-h2-tracking);
+  color: var(--lx-heading);
+  margin: 0 0 var(--lx-space-3);
+}
+.features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--lx-space-3); }
+.features li { display: flex; gap: var(--lx-space-3); }
+.feature-index {
+  flex: none;
+  min-width: var(--lx-space-6);
+  color: var(--lx-brand);
+  font-family: var(--lx-font-mono);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-h3-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  font-variant-numeric: tabular-nums;
+}
+.feature-body { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+.feature-body strong {
+  font-size: var(--lx-text-h3-size);
+  font-weight: var(--lx-text-h3-weight);
+  line-height: var(--lx-text-h3-lh);
+  letter-spacing: var(--lx-text-h3-tracking);
+  color: var(--lx-heading);
+}
+.feature-body span {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+/* Credential strip: the page's signature block (docs/design-system.md §0).
+   Sunken surface + monospaced tabular rows so the values read as "data you
+   type into a client", not as prose. */
+.connect-strip {
+  margin: var(--lx-space-4) 0 0;
+  padding: var(--lx-space-4);
+  background: var(--lx-sunken);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lx-space-2);
+}
+.connect-row { display: flex; gap: var(--lx-space-3); align-items: baseline; flex-wrap: wrap; }
+.connect-key {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  min-width: 68px;
+}
+.connect-value {
+  font-family: var(--lx-font-mono);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+  font-variant-numeric: tabular-nums;
+  color: var(--lx-text);
+  word-break: break-all;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -53,15 +163,18 @@ body {
 }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-4);
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-3) var(--lx-space-5);
   background: var(--lx-card); color: var(--lx-text);
   text-decoration: none; font: inherit;
 }
 .btn:hover { border-color: var(--lx-muted); }
+.btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+/* Primary CTA: the only solid brand fill on the page, so the main action is
+   unmistakable against the ghost secondary below it. */
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
 .btn.primary:hover { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
-.btn.primary:hover { border-color: var(--lx-brand); }
-.hint { color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); margin: 0; flex-basis: 100%; }
+.hint { color: var(--lx-muted); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); margin: 0; flex-basis: 100%; }
 .notice {
   margin: 0; flex-basis: 100%;
   border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3);
@@ -72,7 +185,22 @@ body {
   letter-spacing: var(--lx-text-small-tracking);
 }
 .notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
-footer { margin-top: var(--lx-space-6); color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); }
+footer {
+  margin-top: var(--lx-space-6);
+  padding-top: var(--lx-space-4);
+  border-top: 1px solid var(--lx-line);
+  color: var(--lx-muted);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+@media (max-width: 640px) {
+  .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
+  .brand { align-items: flex-start; }
+  .card { padding: var(--lx-space-4); }
+  .actions { flex-direction: column; align-items: stretch; }
+  .btn { width: 100%; }
+  .hint, .notice { text-align: left; }
+}
 `
 
 const brandLogo = `<svg viewBox="0 0 447.942 447.943" width="40" height="40" aria-hidden="true" focusable="false">
@@ -118,21 +246,57 @@ ${homeStyles}
 <main class="wrap">
   <header class="brand">
     ${brandLogo}
-    <div>
+    <div class="brand-name">
       <h1>LX Music server</h1>
       <p class="muted">一个兼容官方同步协议的重构版</p>
     </div>
   </header>
 
-  <p class="lead">在 Cloudflare Workers 上运行的 LX Music 同步服务：歌单、不喜欢列表与多设备同步配置实时互通，数据留在你自己的部署里。</p>
+  <section class="hero">
+    <p class="eyebrow">LX Music · Sync Server</p>
+    <p class="display">你的音乐数据，同步在你自己的服务器上。</p>
+    <p class="lead">在 Cloudflare Workers 上运行的 LX Music 同步服务：歌单、不喜欢列表与多设备同步配置实时互通，数据留在你自己的部署里。</p>
+  </section>
 
   <section class="card">
     <h2>这个服务器能做什么</h2>
     <ul class="features">
-      <li><span class="mark" aria-hidden="true">·</span>多设备实时同步：WebSocket 长连接，改动即时互通</li>
-      <li><span class="mark" aria-hidden="true">·</span>账号相互隔离：每个账号独立的 Durable Object 与存储</li>
-      <li><span class="mark" aria-hidden="true">·</span>快照与合并：按设备保留历史快照，冲突时增量合并</li>
+      <li>
+        <span class="feature-index" aria-hidden="true">01</span>
+        <span class="feature-body">
+          <strong>多设备实时同步</strong>
+          <span>WebSocket 长连接，改动即时互通。</span>
+        </span>
+      </li>
+      <li>
+        <span class="feature-index" aria-hidden="true">02</span>
+        <span class="feature-body">
+          <strong>账号相互隔离</strong>
+          <span>每个账号独立的 Durable Object 与存储。</span>
+        </span>
+      </li>
+      <li>
+        <span class="feature-index" aria-hidden="true">03</span>
+        <span class="feature-body">
+          <strong>快照与合并</strong>
+          <span>按设备保留历史快照，冲突时增量合并。</span>
+        </span>
+      </li>
     </ul>
+  </section>
+
+  <section class="card">
+    <h2>怎么连接</h2>
+    <div class="connect-strip">
+      <div class="connect-row">
+        <span class="connect-key">服务器地址</span>
+        <span class="connect-value">本页地址（https://…）</span>
+      </div>
+      <div class="connect-row">
+        <span class="connect-key">连接码</span>
+        <span class="connect-value">注册后获得的用户名与密码</span>
+      </div>
+    </div>
     <div class="actions">
       <a class="btn primary" id="admin-link" href="/admin">进入管理面板</a>
       ${registerEntry(mode)}

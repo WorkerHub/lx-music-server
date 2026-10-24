@@ -54,6 +54,7 @@ export const baseTokensCss = `:root {
   --lx-sunken: #eceef1;
   --lx-card: #ffffff;
   --lx-raised: #ffffff;
+  --lx-backdrop: #16202c;
   --lx-line: #e3e6ea;
   --lx-border-strong: #c9cfd6;
   --lx-muted: #5d6b7a;
@@ -96,6 +97,7 @@ const darkTokens = `
   --lx-sunken: #14181e;
   --lx-card: #1a1f26;
   --lx-raised: #222933;
+  --lx-backdrop: #05070a;
   --lx-line: #2b323c;
   --lx-border-strong: #3d4550;
   --lx-muted: #98a2b3;

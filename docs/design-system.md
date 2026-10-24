@@ -175,6 +175,11 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 | `--lx-muted` | `#5d6b7a` | `#98a2b3` | 次要文字 |
 | `--lx-text` | `#1b2430` | `#e6e9ee` | 正文 |
 | `--lx-heading` | `#0e141c` | `#f2f4f7` | 标题 |
+| `--lx-backdrop` | `#16202c` | `#05070a` | 弹窗遮罩底色（配 0.55 透明度使用；Stage 3 裁决增补，见 §5.4） |
+
+### 5.4 Stage 3 裁决增补（2026-10-24 · Mike 记录的 Stage 2 跟进项）
+
+- `--lx-backdrop` 新增于中性色阶（§5.2 表）。背景：Stage 2 评审发现 `.modal-backdrop` 复用 `--lx-heading`，暗色主题下该令牌反转为浅白，遮罩变成刺眼白雾。专用遮罩令牌比页面内暗色特判更符合「令牌即唯一来源」，故按契约 §9 变更流程增补本令牌（值按「与主题底色同族、略深/略深于 bg」选取），页面内不再对遮罩写主题特判。
 
 对比度（实测）：正文 `#1b2430`/`#f6f7f9` = **13.5:1**；muted `#5d6b7a`/`#ffffff` = **4.9:1**（AA ✓）；dark muted `#98a2b3`/`#1a1f26` = **7.0:1**；dark text `#e6e9ee`/`#1a1f26` = **12.6:1**。
 

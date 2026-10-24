@@ -22,46 +22,142 @@ body {
   line-height: var(--lx-text-body-lh);
   letter-spacing: var(--lx-text-body-tracking);
 }
+/* Same brand wash as the landing page: the two SSR pages share one language. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 12% -10%, var(--lx-brand-soft), transparent 55%),
+    radial-gradient(circle at 92% 8%, var(--lx-sunken), transparent 45%);
+}
 .wrap { max-width: 520px; margin: 0 auto; padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8); }
 .head { margin-bottom: var(--lx-space-5); }
-.head h1 { font-size: var(--lx-text-h1-size); font-weight: var(--lx-text-h1-weight); line-height: var(--lx-text-h1-lh); letter-spacing: var(--lx-text-h1-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-1); }
-h2 { font-size: var(--lx-text-h2-size); font-weight: var(--lx-text-h2-weight); line-height: var(--lx-text-h2-lh); letter-spacing: var(--lx-text-h2-tracking); color: var(--lx-heading); margin: 0 0 var(--lx-space-3); }
-.muted { color: var(--lx-muted); }
+.eyebrow {
+  margin: 0 0 var(--lx-space-2);
+  color: var(--lx-brand);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  text-transform: uppercase;
+}
+.head h1 {
+  font-size: var(--lx-text-display-size);
+  font-weight: var(--lx-text-display-weight);
+  line-height: var(--lx-text-display-lh);
+  letter-spacing: var(--lx-text-display-tracking);
+  color: var(--lx-heading);
+  margin: 0 0 var(--lx-space-2);
+}
+h2 {
+  font-size: var(--lx-text-h2-size);
+  font-weight: var(--lx-text-h2-weight);
+  line-height: var(--lx-text-h2-lh);
+  letter-spacing: var(--lx-text-h2-tracking);
+  color: var(--lx-heading);
+  margin: 0 0 var(--lx-space-3);
+}
+.muted { color: var(--lx-muted); font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
 .card { background: var(--lx-card); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-md); padding: var(--lx-space-5); box-shadow: var(--lx-shadow-1); }
 .stack { display: flex; flex-direction: column; gap: var(--lx-space-4); }
 .field { display: flex; flex-direction: column; gap: var(--lx-space-2); }
-.field-label { font-size: var(--lx-text-label-size); font-weight: var(--lx-text-label-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-label-tracking); }
+.field-label {
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  color: var(--lx-heading);
+}
 input, button { font: inherit; }
 input {
   width: 100%;
+  min-height: var(--lx-space-8);
   padding: var(--lx-space-2) var(--lx-space-3);
   border: 1px solid var(--lx-border-strong);
   border-radius: var(--lx-radius-sm);
   background: var(--lx-card);
   color: var(--lx-text);
 }
-input:focus { outline: 2px solid var(--lx-brand); outline-offset: 1px; }
-.hint { color: var(--lx-muted); font-size: var(--lx-text-label-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-label-lh); letter-spacing: var(--lx-text-small-tracking); }
+input:focus { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
+.hint { color: var(--lx-muted); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); }
 .hint.warn { color: var(--lx-warn-text); }
 .hint.ok { color: var(--lx-ok-text); }
-.form-error { color: var(--lx-danger-text); background: var(--lx-danger-bg); border: 1px solid var(--lx-danger-border); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3); margin: 0; }
-.notice { border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-3); margin: 0; background: var(--lx-bg); border: 1px solid var(--lx-line); color: var(--lx-text); }
+.form-error {
+  color: var(--lx-danger-text);
+  background: var(--lx-danger-bg);
+  border: 1px solid var(--lx-danger-border);
+  border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  margin: 0;
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
+.notice {
+  border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  margin: 0;
+  background: var(--lx-sunken);
+  border: 1px solid var(--lx-line);
+  color: var(--lx-text);
+  font-size: var(--lx-text-small-size);
+  line-height: var(--lx-text-small-lh);
+}
 .notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
 .notice.ok { background: var(--lx-ok-bg); color: var(--lx-ok-text); border-color: var(--lx-ok-border); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--lx-space-8);
   border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm); padding: var(--lx-space-2) var(--lx-space-4);
   background: var(--lx-card); color: var(--lx-text); cursor: pointer;
 }
 .btn:hover:not(:disabled) { border-color: var(--lx-muted); }
+.btn:focus-visible { outline: 2px solid var(--lx-brand); outline-offset: 2px; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn.primary { background: var(--lx-brand); border-color: var(--lx-brand); color: var(--lx-brand-on); }
 .btn.primary:hover:not(:disabled) { background: var(--lx-brand-hover); border-color: var(--lx-brand-hover); }
 .btn.ghost { background: transparent; }
-.server-box { background: var(--lx-sunken); border: 1px solid var(--lx-line); border-radius: var(--lx-radius-sm); padding: var(--lx-space-3); margin: var(--lx-space-4) 0 var(--lx-space-3); }
+.submit-row { display: flex; flex-direction: column; gap: var(--lx-space-3); }
+/* Credential block: the success state of a registration is the pair the user
+   must carry to the client, so it is typeset like data — sunken surface,
+   monospaced tabular values (docs/design-system.md §0). */
+.server-box {
+  background: var(--lx-sunken);
+  border: 1px solid var(--lx-line);
+  border-radius: var(--lx-radius-sm);
+  padding: var(--lx-space-4);
+  margin: var(--lx-space-4) 0 var(--lx-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lx-space-3);
+}
 .server-row { display: flex; gap: var(--lx-space-3); align-items: baseline; flex-wrap: wrap; }
-.server-key { color: var(--lx-muted); }
-code { font-family: var(--lx-font-mono); font-size: var(--lx-text-small-size); font-weight: var(--lx-text-small-weight); line-height: var(--lx-text-small-lh); letter-spacing: var(--lx-text-small-tracking); font-variant-numeric: tabular-nums; word-break: break-all; }
+.server-key {
+  color: var(--lx-muted);
+  font-size: var(--lx-text-label-size);
+  font-weight: var(--lx-text-label-weight);
+  line-height: var(--lx-text-label-lh);
+  letter-spacing: var(--lx-text-label-tracking);
+  min-width: 68px;
+}
+code {
+  font-family: var(--lx-font-mono);
+  font-size: var(--lx-text-small-size);
+  font-weight: var(--lx-text-small-weight);
+  line-height: var(--lx-text-small-lh);
+  letter-spacing: var(--lx-text-small-tracking);
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+.success-steps { margin: 0; padding-left: var(--lx-space-5); color: var(--lx-text); font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
+.success-steps li + li { margin-top: var(--lx-space-1); }
+@media (max-width: 640px) {
+  .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
+  .card { padding: var(--lx-space-4); }
+  .btn { width: 100%; }
+  .server-row { flex-direction: column; gap: var(--lx-space-1); }
+}
 `
 
 const registerScript = `
@@ -260,6 +356,7 @@ ${registerStyles}
 <body>
 <main class="wrap">
   <header class="head">
+    <p class="eyebrow">LX Music · Sync Server</p>
     <h1>注册 LX Music 账号</h1>
     <p class="muted">在当前服务器创建同步账号</p>
   </header>
@@ -296,8 +393,10 @@ ${registerStyles}
         <input id="confirm" type="password" autocomplete="new-password" required>
       </label>
       <p class="form-error" id="form-error" hidden></p>
-      <button class="btn primary" id="submit" type="submit">注册</button>
-      <p class="hint">注册成功后，用这个用户名和密码（连接码）在 LX Music 客户端连接本服务器。</p>
+      <div class="submit-row">
+        <button class="btn primary" id="submit" type="submit">注册</button>
+        <p class="hint">注册成功后，用这个用户名和密码（连接码）在 LX Music 客户端连接本服务器。</p>
+      </div>
     </form>
 
     <div id="success-view" hidden>
@@ -309,6 +408,11 @@ ${registerStyles}
           <code id="server-address"></code>
         </div>
       </div>
+      <ol class="success-steps">
+        <li>打开 LX Music 客户端的「同步设置」。</li>
+        <li>填写上面的服务器地址与你的用户名。</li>
+        <li>用你刚才设置的密码（连接码）完成连接。</li>
+      </ol>
       <p class="hint">连接码就是你刚才设置的密码。</p>
       <button class="btn ghost" id="again-btn" type="button">再注册一个</button>
     </div>
