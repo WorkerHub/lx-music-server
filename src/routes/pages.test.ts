@@ -1925,8 +1925,10 @@ describe('admin panel layout and about page polish (WK-22)', () => {
     )
     expect(aboutTab).toContain('致谢')
     expect(aboutTab).toContain(
-      '本项目是 <a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">原始项目</a> 的重构版本',
+      '本项目是 原始项目 的重构版本，运行在 Cloudflare Worker 上，完全兼容原始项目的通信协议。',
     )
+    // 「原始项目」在致谢正文里是纯文本，不再内嵌超链接；链接只保留在下方链接区。
+    expect(aboutTab).not.toContain('>原始项目</a>')
     for (const repo of [
       'lx-music-sync-server',
       'lx-music-desktop',

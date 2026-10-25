@@ -2950,7 +2950,7 @@ ${adminStyles}
           <h2>致谢</h2>
         </div>
         <p class="muted">
-          本项目是 <a href="https://github.com/lyswhut/lx-music-sync-server" target="_blank" rel="noopener noreferrer">原始项目</a> 的重构版本，运行在 Cloudflare Worker 上，完全兼容原始项目的通信协议。另外在此基础上添加了后台管理页面，以方便管理用户。
+          本项目是 原始项目 的重构版本，运行在 Cloudflare Worker 上，完全兼容原始项目的通信协议。另外在此基础上添加了后台管理页面，以方便管理用户。
         </p>
         <dl class="about-list">
           <div class="about-row">
