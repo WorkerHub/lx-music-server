@@ -228,6 +228,21 @@ describe('landing page', () => {
     expect(html).toContain('id="admin-link" href="/admin"')
   })
 
+  it('shows the deploy version in the footer and drops the sync hint', async () => {
+    // The footer no longer carries the old sync hint: it shows the version
+    // injected by the deploy workflow (package.json version), or "dev" when
+    // the var is not injected, mirroring /api/admin/build-info.
+    const { env } = await createTestEnv()
+
+    const devHtml = await (await app.request('/', {}, env)).text()
+    expect(devHtml).not.toContain('在 LX Music 客户端里填写本页地址')
+    expect(devHtml).toContain('<footer>dev</footer>')
+
+    const injected = { ...env, BUILD_VERSION: '1.2.1' } as unknown as LX.Env
+    const injectedHtml = await (await app.request('/', {}, injected)).text()
+    expect(injectedHtml).toContain('<footer>v1.2.1</footer>')
+  })
+
   it('keeps every neighbouring route untouched', async () => {
     // `/` used to fall through the composed app to a 404; the mounted router is
     // what a browser hits, so the mount itself is checked here.
