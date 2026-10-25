@@ -261,3 +261,61 @@ describe('UserRegistryDO settings', () => {
     expect(await updated.json()).toEqual({ registrationMode: 'open' })
   })
 })
+
+describe('UserRegistryDO last seen', () => {
+  const lastSeen = (registry: UserRegistryDO, name: string) =>
+    call(registry, `/users/${encodeURIComponent(name)}/last-seen`, {
+      method: 'POST',
+    })
+
+  const setStoredLastSeen = (
+    storage: MemoryStorage,
+    name: string,
+    lastSeenAt: number,
+  ) => {
+    const users = storage.data.get('users') as LX.RegistryUser[]
+    const index = users.findIndex((u) => u.name === name)
+    users[index] = { ...users[index], lastSeenAt }
+  }
+
+  it('records the timestamp for a user that never authenticated', async () => {
+    const { registry, storage } = await createRegistry({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    const before = Date.now()
+
+    const res = await lastSeen(registry, 'alice')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      updated: boolean
+      lastSeenAt: number
+    }
+    expect(body.updated).toBe(true)
+    expect(body.lastSeenAt).toBeGreaterThanOrEqual(before)
+    const users = storage.data.get('users') as LX.RegistryUser[]
+    expect(users[0].lastSeenAt).toBe(body.lastSeenAt)
+  })
+
+  it('skips the write inside the throttle window and writes again after it', async () => {
+    const { registry, storage } = await createRegistry({
+      users: [{ name: 'alice', password: 'pw12345678' }],
+    })
+    setStoredLastSeen(storage, 'alice', Date.now() - 1000)
+
+    const throttled = await lastSeen(registry, 'alice')
+    expect(await throttled.json()).toMatchObject({ updated: false })
+
+    setStoredLastSeen(storage, 'alice', Date.now() - 61_000)
+    const written = await lastSeen(registry, 'alice')
+    expect(await written.json()).toMatchObject({ updated: true })
+    const users = storage.data.get('users') as LX.RegistryUser[]
+    expect(users[0].lastSeenAt).toBeGreaterThan(Date.now() - 60_000)
+  })
+
+  it('answers 404 for an unknown user', async () => {
+    const { registry } = await createRegistry({})
+
+    expect((await lastSeen(registry, 'nobody')).status).toBe(404)
+  })
+})

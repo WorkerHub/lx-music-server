@@ -2,8 +2,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { sha256Hex } from '@/admin/auth'
 import { getUser, listTombstones } from '@/registry/client'
 import { addTestUser, createTestEnv } from '@/test/registryEnv'
-import { toMD5 } from '@/utils/crypto'
+import { aesEncrypt, toMD5 } from '@/utils/crypto'
+import { getKeySeed } from '@/utils/password'
 import app from './admin'
+import authApp from './auth'
 
 const ADMIN_PASSWORD = 'admin-password-123'
 let adminHash = ''
@@ -116,6 +118,55 @@ describe('admin API configuration and login', () => {
 })
 
 describe('admin user listing', () => {
+  it('reports lastSeenAt as null for an account that never authenticated', async () => {
+    const { env } = await setup({
+      users: [{ name: 'legacy', password: 'pw12345678' }],
+    })
+    const cookie = await login(env)
+
+    const res = await app.request('/api/admin/users', authed(cookie), env)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      users: Array<{ lastSeenAt: unknown }>
+    }
+    expect(body.users[0]).toHaveProperty('lastSeenAt', null)
+  })
+
+  it('reports lastSeenAt after a successful auth', async () => {
+    const { env } = await setup({
+      users: [{ name: 'alice', password: 'pw' }],
+      syncFetch: async (_name: string, request: Request) => {
+        const path = new URL(request.url).pathname
+        if (path === '/auth')
+          return Response.json({
+            encrypted: 'enc',
+            clientId: 'c1',
+            userName: 'alice',
+          })
+        return syncFetch(_name, request)
+      },
+    })
+    const cookie = await login(env)
+    const authMsg = `lx-music auth::\n<publickey>\ndev\n`
+    const key = btoa(
+      getKeySeed({ name: 'alice', passwordHash: toMD5('pw') }) as string,
+    )
+
+    const authRes = await authApp.request(
+      '/ah',
+      { headers: { m: aesEncrypt(authMsg, key) } },
+      env,
+    )
+    expect(authRes.status).toBe(200)
+
+    const res = await app.request('/api/admin/users', authed(cookie), env)
+    const body = (await res.json()) as {
+      users: Array<{ name: string; lastSeenAt: number | null }>
+    }
+    const alice = body.users.find((user) => user.name === 'alice')
+    expect(typeof alice?.lastSeenAt).toBe('number')
+  })
+
   it('returns the public view without password hashes', async () => {
     const { env } = await setup({
       users: [{ name: 'legacy', password: 'pw12345678' }],

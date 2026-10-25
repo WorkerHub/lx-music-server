@@ -1,4 +1,5 @@
 import {
+  LAST_SEEN_WRITE_INTERVAL_MS,
   REGISTRY_SEEDED_KEY,
   REGISTRY_SETTINGS_KEY,
   REGISTRY_TOMBSTONES_KEY,
@@ -138,6 +139,10 @@ export class UserRegistryDO implements DurableObject {
     const statusMatch = path.match(/^\/users\/([^/]+)\/status$/)
     if (statusMatch && method === 'POST')
       return this.handleTransition(request, decodeURIComponent(statusMatch[1]))
+
+    const lastSeenMatch = path.match(/^\/users\/([^/]+)\/last-seen$/)
+    if (lastSeenMatch && method === 'POST')
+      return this.handleTouchLastSeen(decodeURIComponent(lastSeenMatch[1]))
 
     const tombstoneMatch = path.match(/^\/users\/([^/]+)\/tombstone$/)
     if (tombstoneMatch && method === 'POST')
@@ -305,6 +310,26 @@ export class UserRegistryDO implements DurableObject {
 
   // Step one of account deletion: drop the account, keep the DO data, and
   // reserve the name via a tombstone so nobody else can inherit the data.
+  // Called by `/ah` after a successful authentication of any kind. The write is
+  // throttled to one per `LAST_SEEN_WRITE_INTERVAL_MS` per user, so a chatty
+  // client does not rewrite the whole user list on every request; every call
+  // still reports the stored value so callers can test the behaviour.
+  private async handleTouchLastSeen(name: string): Promise<Response> {
+    const users = await this.getUsers()
+    const index = users.findIndex((u) => u.name === name)
+    if (index === -1) return json({ error: 'user not found' }, 404)
+
+    const now = Date.now()
+    const lastSeenAt = users[index].lastSeenAt ?? null
+    if (lastSeenAt !== null && now - lastSeenAt < LAST_SEEN_WRITE_INTERVAL_MS) {
+      return json({ updated: false, lastSeenAt })
+    }
+
+    users[index] = { ...users[index], lastSeenAt: now }
+    await this.saveUsers(users)
+    return json({ updated: true, lastSeenAt: now })
+  }
+
   private async handleTombstone(name: string): Promise<Response> {
     const users = await this.getUsers()
     const index = users.findIndex((u) => u.name === name)

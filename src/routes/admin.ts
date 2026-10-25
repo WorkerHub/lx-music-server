@@ -51,6 +51,9 @@ interface AdminUserView {
   status: LX.UserStatus
   source: LX.UserSource
   createdAt: number
+  // Epoch ms of the last successful authentication, `null` when the account has
+  // never authenticated (or predates the field).
+  lastSeenAt: number | null
   maxSnapshotNum: number
   addMusicLocationType: LX.AddMusicLocationType
   deviceCount: number | null
@@ -117,6 +120,7 @@ const toView = (
   status: user.status,
   source: user.source,
   createdAt: user.createdAt,
+  lastSeenAt: user.lastSeenAt ?? null,
   maxSnapshotNum: user.maxSnapshotNum ?? DEFAULT_MAX_SNAPSHOT_NUM,
   addMusicLocationType:
     user['list.addMusicLocationType'] ?? DEFAULT_ADD_MUSIC_LOCATION_TYPE,
