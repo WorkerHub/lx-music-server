@@ -755,6 +755,24 @@ describe('admin build info', () => {
     })
   })
 
+  it('passes the composite display version through verbatim', async () => {
+    // The deploy workflow now injects the full display string
+    // v{version}-{commit count}-{7-char sha}; the endpoint must not reformat it.
+    const { env } = await setup()
+    env.BUILD_VERSION = 'v1.3.1-2-abc1234'
+    env.BUILD_COMMIT = BUILD_COMMIT
+    env.BUILD_TIME = '2026-10-21T06:47:30Z'
+    const cookie = await login(env)
+
+    const res = await app.request('/api/admin/build-info', authed(cookie), env)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      version: 'v1.3.1-2-abc1234',
+      commit: BUILD_COMMIT,
+      builtAt: '2026-10-21T06:47:30Z',
+    })
+  })
+
   it('falls back to dev/null when nothing was injected', async () => {
     const { env } = await setup()
     const cookie = await login(env)
