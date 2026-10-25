@@ -451,16 +451,25 @@ tbody tr:last-child td { border-bottom: none; }
 .field:has(select:focus-visible) {
   outline: none;
 }
+/* 提示条：固定覆盖层，脱离文档流，弹出时不挤压/下推下方内容；顶栏下方
+   居中显示。z-index 高于 modal（20），modal 内操作触发的提示也能盖在上层。 */
 .notice {
+  position: fixed;
+  top: var(--lx-space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--lx-space-4));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--lx-space-2);
   border-radius: var(--lx-radius-sm);
   padding: var(--lx-space-2) var(--lx-space-3);
-  margin-bottom: var(--lx-space-4);
   background: var(--lx-sunken);
   border: 1px solid var(--lx-line);
+  box-shadow: var(--lx-shadow-2);
   font-size: var(--lx-text-small-size);
   line-height: var(--lx-text-small-lh);
 }
@@ -1012,7 +1021,7 @@ const adminScript = `
     if (noticeTimer) clearTimeout(noticeTimer)
     noticeTimer = setTimeout(function () {
       node.hidden = true
-    }, 5000)
+    }, 3000)
   }
 
   class ApiError extends Error {
