@@ -437,6 +437,20 @@ tbody tr:last-child td { border-bottom: none; }
 .login-card .field:has(input:focus-visible) {
   outline: none;
 }
+/* 所有 .field 包裹的文本类控件（input 文本/密码/数字、select）：聚焦态去掉
+   绿色 outline（input:focus 内层 + .field:has(:focus-visible) 外层两条规则
+   都会命中，形成双层嵌套框），改用中性强调色边框作为焦点指示，保持键盘
+   可达。统一覆盖登录页、「添加用户」与「系统设置」等全部 .field 表单；
+   复选框（.check）与单选项（.mode-option）不在其列，保持原有绿色不变。 */
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--lx-heading);
+}
+.field:has(input:focus-visible),
+.field:has(select:focus-visible) {
+  outline: none;
+}
 .notice {
   border-radius: var(--lx-radius-sm);
   padding: var(--lx-space-2) var(--lx-space-3);
