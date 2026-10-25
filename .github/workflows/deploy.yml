@@ -16,6 +16,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # The full history and every tag are required: the display version
+          # carries the commit count since the latest v* tag, which is computed
+          # with `git rev-list --count` below. A shallow clone would silently
+          # under-report it.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -98,8 +104,31 @@ jobs:
           # about page read it through GET /api/admin/build-info. BUILD_COMMIT
           # must be the SHA this workflow actually deployed, which under
           # workflow_run is head_sha, not github.sha.
-          BUILD_VERSION="$(node -p "require('./package.json').version")"
+          #
+          # Display version, v{package.json version}-{commits since the latest
+          # v* tag}-{7-char commit} (e.g. v1.3.1-2-abc1234). The count needs the
+          # full history and tags fetched above; with no v* tag the checkout
+          # cannot know a base, so the contract falls back to 0.
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
           BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          SHORT_SHA="${BUILD_COMMIT:0:7}"
+          if ! [[ "$SHORT_SHA" =~ ^[0-9a-f]{7}$ ]]; then
+            SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          fi
+
+          LAST_VERSION_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+          if [ -n "$LAST_VERSION_TAG" ]; then
+            BUILD_COUNT="$(git rev-list --count "$LAST_VERSION_TAG..HEAD")"
+          else
+            echo "::warning::no v* tag reachable from HEAD; build count falls back to 0"
+            BUILD_COUNT=0
+          fi
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "::warning::shallow clone: the build count may under-report"
+          fi
+
+          BUILD_VERSION="v${PACKAGE_VERSION}-${BUILD_COUNT}-${SHORT_SHA}"
           echo "build info: version=$BUILD_VERSION commit=$BUILD_COMMIT builtAt=$BUILD_TIME"
           pnpm wrangler deploy \
             --secrets-file "$RUNNER_TEMP/secrets.json" \
