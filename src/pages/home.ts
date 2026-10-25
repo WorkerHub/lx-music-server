@@ -7,8 +7,9 @@
 // `closed` deployment never even links to /register instead of hiding the link
 // after a round trip.
 //
-// Nothing user-controlled is interpolated: the only input is the enum above,
-// and it is only branched on, never written into the markup.
+// The only dynamic value written into the markup is the page's own origin,
+// HTML-escaped before interpolation (defensive); the registration mode is
+// only branched on, never written out.
 //
 // Layout notes (docs/design-system.md §0/§8): one 640px column, a hero whose
 // headline carries the page, then one card per idea with a deliberate
@@ -17,6 +18,26 @@
 // element: monospaced, tabular figures, self-explanatory without a script.
 
 import { ssrTokenCss } from '@/ui/tokens'
+
+// The only dynamic value interpolated into the document is the page's own
+// origin (from `new URL(c.req.url).origin`). A URL origin cannot carry markup
+// characters today, but it is escaped anyway so nothing raw ever enters the
+// markup.
+const escapeHtml = (value: string): string =>
+  value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;'
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '"':
+        return '&quot;'
+      default:
+        return '&#39;'
+    }
+  })
 
 const homeStyles = `
 * { box-sizing: border-box; }
@@ -49,9 +70,12 @@ body::before {
   padding: var(--lx-space-7) var(--lx-space-4) var(--lx-space-8);
   animation: lx-fade-up var(--lx-motion-base) var(--lx-ease-out) both;
 }
-.brand { display: flex; align-items: center; gap: var(--lx-space-4); }
-.brand svg { flex: none; }
-.brand-name { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+/* Logo and h1 share one visual row (centered against each other); the subtitle
+   sits on its own row below, so the 40px logo no longer centers against the
+   whole h1 + subtitle block. */
+.brand { display: flex; flex-direction: column; gap: var(--lx-space-1); }
+.brand-row { display: flex; align-items: center; gap: var(--lx-space-4); }
+.brand-row svg { flex: none; }
 .brand h1 {
   font-size: var(--lx-text-h1-size);
   font-weight: var(--lx-text-h1-weight);
@@ -69,7 +93,7 @@ body::before {
   letter-spacing: var(--lx-text-label-tracking);
   text-transform: uppercase;
 }
-.muted { color: var(--lx-muted); }
+.muted { color: var(--lx-muted); margin: 0; }
 .lead {
   margin: var(--lx-space-4) 0 0;
   font-size: var(--lx-text-h3-size);
@@ -187,10 +211,13 @@ body::before {
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm);
-  padding: var(--lx-space-3) var(--lx-space-5);
+  /* Compact single-line CTA: the same control-height step as admin inputs and
+     buttons (2×8px padding + 2×1px border), not the spacing scale. */
+  padding: var(--lx-space-2) var(--lx-space-3);
   background: var(--lx-card); color: var(--lx-text);
   text-decoration: none; font: inherit;
-  min-height: var(--lx-space-8);
+  min-height: var(--lx-control-height);
+  white-space: nowrap;
   transition:
     background-color var(--lx-motion-fast) var(--lx-ease-standard),
     border-color var(--lx-motion-fast) var(--lx-ease-standard),
@@ -231,10 +258,9 @@ footer {
 }
 @media (max-width: 640px) {
   .wrap { padding: var(--lx-space-6) var(--lx-space-4) var(--lx-space-7); }
-  .brand { align-items: flex-start; }
   .card { padding: var(--lx-space-4); }
   .actions { flex-direction: column; align-items: stretch; }
-  .btn { width: 100%; }
+  .btn { align-self: flex-start; }
   .hint, .notice { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -275,6 +301,7 @@ const registerEntry = (mode: LX.RegistrationMode | null): string => {
 
 export const homePageHtml = (
   mode: LX.RegistrationMode | null,
+  origin: string,
 ): string => `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -291,11 +318,11 @@ ${homeStyles}
 <body>
 <main class="wrap">
   <header class="brand">
-    ${brandLogo}
-    <div class="brand-name">
+    <div class="brand-row">
+      ${brandLogo}
       <h1>LX Music server</h1>
-      <p class="muted">一个兼容官方同步协议的重构版</p>
     </div>
+    <p class="muted">一个兼容官方同步协议的重构版</p>
   </header>
 
   <section class="hero">
@@ -336,7 +363,7 @@ ${homeStyles}
     <div class="connect-strip">
       <div class="connect-row">
         <span class="connect-key">服务器地址</span>
-        <span class="connect-value">本页地址（https://…）</span>
+        <span class="connect-value">${escapeHtml(origin)}</span>
       </div>
       <div class="connect-row">
         <span class="connect-key">连接码</span>

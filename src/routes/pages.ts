@@ -34,7 +34,11 @@ app.get('/', async (c) => {
   } catch {
     mode = null
   }
-  return c.html(homePageHtml(mode), 200, PAGE_HEADERS)
+  return c.html(
+    homePageHtml(mode, new URL(c.req.url).origin),
+    200,
+    PAGE_HEADERS,
+  )
 })
 
 app.get('/admin', (c) => {
