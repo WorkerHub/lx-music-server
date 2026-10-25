@@ -229,18 +229,25 @@ describe('landing page', () => {
   })
 
   it('shows the deploy version in the footer and drops the sync hint', async () => {
-    // The footer no longer carries the old sync hint: it shows the version
-    // injected by the deploy workflow (package.json version), or "dev" when
-    // the var is not injected, mirroring /api/admin/build-info.
+    // The footer no longer carries the old sync hint: it shows the display
+    // version injected by the deploy workflow — the full
+    // v{version}-{build count}-{short sha} string — or "dev" when the var is
+    // not injected. It is printed verbatim, never re-prefixed, so the landing
+    // footer reads the same as the admin panel.
     const { env } = await createTestEnv()
 
     const devHtml = await (await app.request('/', {}, env)).text()
     expect(devHtml).not.toContain('在 LX Music 客户端里填写本页地址')
     expect(devHtml).toContain('<footer>dev</footer>')
 
-    const injected = { ...env, BUILD_VERSION: '1.2.1' } as unknown as LX.Env
+    const injected = {
+      ...env,
+      BUILD_VERSION: 'v1.3.1-2-abc1234',
+    } as unknown as LX.Env
     const injectedHtml = await (await app.request('/', {}, injected)).text()
-    expect(injectedHtml).toContain('<footer>v1.2.1</footer>')
+    // Verbatim: no doubled `vv...` prefix from the page layer.
+    expect(injectedHtml).toContain('<footer>v1.3.1-2-abc1234</footer>')
+    expect(injectedHtml).not.toContain('<footer>vv1.3.1-2-abc1234')
   })
 
   it('keeps every neighbouring route untouched', async () => {
@@ -800,6 +807,104 @@ describe('page markup safety', () => {
     // dev builds must fall back to 'dev' / '—' instead of undefined or null.
     expect(adminPageHtml).toContain("commit === 'dev'")
     expect(adminPageHtml).toContain("'—'")
+  })
+
+  it('shows the injected version verbatim in the footer and the about page', () => {
+    // The deploy workflow now injects the full display string
+    // v{version}-{build count}-{7-char sha}. The page must print it as-is:
+    // no extra "v" prefix, no separately appended short commit. Otherwise the
+    // dashboard footer and the about page disagree with the landing footer.
+
+    // versionText() is a pass-through of buildVersion(), whose only reshaping
+    // is the 'dev' fallback for un-injected builds.
+    const versionText = section('function versionText()', 'async function')
+    expect(versionText).toMatch(/return buildVersion\(\)/)
+    expect(versionText).not.toContain("'v' +")
+    expect(adminPageHtml).not.toContain("'v' + version")
+    expect(adminPageHtml).not.toContain('function shortCommit(')
+    // The 'dev' fallback for un-injected builds lives in buildVersion().
+    const buildVersion = section(
+      'function buildVersion()',
+      'function buildCommit()',
+    )
+    expect(buildVersion).toContain(": 'dev'")
+
+    // Footer line: the version alone, since the short sha is inside it.
+    const renderBuildInfo = section(
+      'function renderBuildInfo()',
+      'function renderAbout()',
+    )
+    expect(renderBuildInfo).toContain('line.textContent = versionText()')
+    expect(renderBuildInfo).not.toContain("' · '")
+    expect(renderBuildInfo).not.toContain('buildCommit()')
+
+    // About page: 版本号 carries the same full string, 提交 still the full sha.
+    const renderAbout = section('function renderAbout()', 'function openModal(')
+    expect(renderAbout).toContain(
+      "$('about-version').textContent = versionText()",
+    )
+    expect(renderAbout).toContain("$('about-commit').textContent = commit")
+    expect(renderAbout).not.toContain("about-commit').textContent = short")
+  })
+
+  it('renders the same version string on all three surfaces (ONE-295)', () => {
+    // Source assertions cannot see what the script actually paints. This runs
+    // the real build-info functions (extracted from the page) against a stubbed
+    // DOM, then compares them with the landing footer rendered by
+    // homePageHtml(), so the three surfaces are checked against one value.
+    const source = `
+${section('function buildVersion()', 'async function loadBuildInfo')}
+${section('function renderBuildInfo()', 'function openModal(')}
+return { versionText: versionText, renderBuildInfo: renderBuildInfo, renderAbout: renderAbout }
+`
+    const nodes: Record<string, { textContent: string; hidden: boolean }> = {
+      'build-line': { textContent: '', hidden: true },
+      'about-version': { textContent: '', hidden: false },
+      'about-commit': { textContent: '', hidden: false },
+      'about-built': { textContent: '', hidden: false },
+    }
+    const state: { build: unknown } = { build: null }
+    const $ = (id: string) => nodes[id]
+    const render = new Function('state', '$', 'formatTime', source) as (
+      state: unknown,
+      $: unknown,
+      formatTime: unknown,
+    ) => {
+      versionText: () => string
+      renderBuildInfo: () => void
+      renderAbout: () => void
+    }
+    const page = render(state, $, () => '2026-10-21 06:47')
+
+    const display = 'v1.3.1-2-abc1234'
+    const fullSha = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c'
+    state.build = { version: display, commit: fullSha, builtAt: null }
+    page.renderBuildInfo()
+    page.renderAbout()
+
+    // 未登录页底部 == 已登录页底部 == 关于页「版本号」：完全一致。
+    const landingFooter = homePageHtml(null, HOME_ORIGIN, display).match(
+      /<footer>(.*)<\/footer>/,
+    )?.[1]
+    expect(landingFooter).toBe(display)
+    expect(nodes['build-line'].textContent).toBe(display)
+    expect(nodes['about-version'].textContent).toBe(display)
+    expect(nodes['build-line'].textContent).toBe(
+      nodes['about-version'].textContent,
+    )
+    // No doubled `v` and no trailing " · shortsha" appended by the page.
+    expect(nodes['build-line'].textContent).not.toContain(' · ')
+    expect(nodes['build-line'].hidden).toBe(false)
+    // 关于页「提交」行仍是全 SHA，不受影响。
+    expect(nodes['about-commit'].textContent).toBe(fullSha)
+    expect(nodes['about-commit'].textContent).toHaveLength(40)
+
+    // Un-injected dev build: all three still agree on 'dev'.
+    state.build = null
+    page.renderBuildInfo()
+    page.renderAbout()
+    expect(nodes['about-version'].textContent).toBe('dev')
+    expect(homePageHtml(null, HOME_ORIGIN)).toContain('<footer>dev</footer>')
   })
 
   it('keeps orphan counts unknown until the list actually loads', () => {
@@ -2400,7 +2505,6 @@ describe('admin panel live-feedback fixes (ONE-164)', () => {
       'formatTime',
       'summaryText',
       'versionText',
-      'shortCommit',
       'labelFrom',
       'statusClass',
     ]) {
