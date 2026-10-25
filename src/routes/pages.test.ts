@@ -12,6 +12,11 @@ import app from './pages'
 
 const ADMIN_HASH = 'a'.repeat(64)
 
+// Static markup assertions use a realistic same-origin value for the landing
+// page's server-address row; the live-render tests compare against hono's own
+// default `http://localhost` origin.
+const HOME_ORIGIN = 'https://lx.example.workers.dev'
+
 // One harness for the live-render evidence below (item 2): a real admin
 // session against the real routes, so the four KPI values are the same bytes a
 // browser receives — not a hand-written fixture.
@@ -147,6 +152,15 @@ describe('landing page', () => {
     expect(html).toContain('<title>LX Music Server · 同步服务</title>')
     expect(html).toContain('<h1>LX Music server</h1>')
     expect(html).toContain('一个兼容官方同步协议的重构版')
+    // The server-address row shows the page's own origin, not the old
+    // hardcoded "本页地址（https://…）" placeholder, and the 连接码 row stays put.
+    expect(html).toContain(
+      '<span class="connect-value">http://localhost</span>',
+    )
+    expect(html).not.toContain('本页地址（https://…）')
+    expect(html).toContain(
+      '<span class="connect-value">注册后获得的用户名与密码</span>',
+    )
     // Nothing to fetch and nothing to execute: the page is correct as served.
     expect(html).not.toContain('<script')
     expect(html).toContain('<link rel="icon" href="/favicon.ico" sizes="any">')
@@ -207,7 +221,7 @@ describe('landing page', () => {
     const res = await app.request('/', {}, makeEnv())
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).toBe(homePageHtml(null))
+    expect(html).toBe(homePageHtml(null, 'http://localhost'))
     expect(html).not.toContain('/register')
     expect(html).toContain('id="register-unknown"')
     expect(html).toContain('暂时无法读取注册状态')
@@ -249,10 +263,10 @@ describe('landing page', () => {
 const pages: Array<[string, string]> = [
   ['admin', adminPageHtml],
   ['register', registerPageHtml],
-  ['home (registration open)', homePageHtml('open')],
-  ['home (registration approval)', homePageHtml('approval')],
-  ['home (registration closed)', homePageHtml('closed')],
-  ['home (registration mode unknown)', homePageHtml(null)],
+  ['home (registration open)', homePageHtml('open', HOME_ORIGIN)],
+  ['home (registration approval)', homePageHtml('approval', HOME_ORIGIN)],
+  ['home (registration closed)', homePageHtml('closed', HOME_ORIGIN)],
+  ['home (registration mode unknown)', homePageHtml(null, HOME_ORIGIN)],
 ]
 
 // Markup that makes the browser fetch something from another origin. A plain
@@ -1886,7 +1900,7 @@ describe('responsive and motion contract', () => {
   }
 
   it('keeps decorative layers out of hit testing on the SSR pages', () => {
-    for (const html of [homePageHtml('open'), registerPageHtml]) {
+    for (const html of [homePageHtml('open', HOME_ORIGIN), registerPageHtml]) {
       const css = styles(html)
       const bodyBefore = css.slice(
         css.indexOf('body::before'),
@@ -1945,7 +1959,7 @@ describe('responsive and motion contract', () => {
   it('keeps entry motion on outer containers and reduced-motion consistent', () => {
     // Animation-fill-mode on a button would pin transform: translateY(0) and
     // suppress its :active scale, so entry motion belongs to the outer wrap.
-    for (const html of [homePageHtml('open'), registerPageHtml]) {
+    for (const html of [homePageHtml('open', HOME_ORIGIN), registerPageHtml]) {
       const css = styles(html)
       const wrap = css.match(/\.wrap \{([^}]*)\}/)
       expect(wrap).not.toBeNull()
@@ -1958,7 +1972,7 @@ describe('responsive and motion contract', () => {
     const registerCss = styles(registerPageHtml)
     expect(registerCss).not.toContain('.card, .field, .server-box, .btn')
     expect(
-      homePageHtml('open').match(
+      homePageHtml('open', HOME_ORIGIN).match(
         /@media \(hover: hover\) \{\n {2}\.card:hover/g,
       ),
     ).toHaveLength(1)

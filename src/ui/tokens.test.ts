@@ -39,7 +39,10 @@ describe('shared design tokens', () => {
   })
 
   it('injects the matching palette into all three page entry points', () => {
-    for (const html of [homePageHtml('open'), registerPageHtml]) {
+    for (const html of [
+      homePageHtml('open', 'https://lx.example.workers.dev'),
+      registerPageHtml,
+    ]) {
       expect(html).toContain(ssrTokenCss)
       expect(html).not.toContain(darkTokensCss)
     }
@@ -122,7 +125,7 @@ describe('shared design tokens', () => {
 
   it('leaves raw colors only in the token source and the fixed logo artwork', () => {
     for (const html of [
-      homePageHtml('open'),
+      homePageHtml('open', 'https://lx.example.workers.dev'),
       registerPageHtml,
       adminPageHtml,
     ]) {
