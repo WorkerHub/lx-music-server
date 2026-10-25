@@ -425,6 +425,18 @@ tbody tr:last-child td { border-bottom: none; }
   outline: 2px solid var(--lx-brand);
   outline-offset: 2px;
 }
+/* 登录页密码输入框（.login-card 内唯一输入框）：聚焦态去掉绿色 outline
+   （input 内层 + .field 外层两条规则都会命中，形成双层框），改用中性强调色
+   边框作为焦点指示，保持键盘可达。范围限定 .login-card，不影响「添加用户」
+   与「系统设置」里的输入框。 */
+.login-card input:focus,
+.login-card input:focus-visible {
+  outline: none;
+  border-color: var(--lx-heading);
+}
+.login-card .field:has(input:focus-visible) {
+  outline: none;
+}
 .notice {
   border-radius: var(--lx-radius-sm);
   padding: var(--lx-space-2) var(--lx-space-3);
