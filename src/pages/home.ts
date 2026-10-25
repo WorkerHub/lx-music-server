@@ -7,9 +7,9 @@
 // `closed` deployment never even links to /register instead of hiding the link
 // after a round trip.
 //
-// The only dynamic value written into the markup is the page's own origin,
-// HTML-escaped before interpolation (defensive); the registration mode is
-// only branched on, never written out.
+// The only dynamic values written into the markup are the page's own origin
+// and the build version, both HTML-escaped before interpolation (defensive);
+// the registration mode is only branched on, never written out.
 //
 // Layout notes (docs/design-system.md §0/§8): one 640px column, a hero whose
 // headline carries the page, then one card per idea with a deliberate
@@ -19,10 +19,10 @@
 
 import { ssrTokenCss } from '@/ui/tokens'
 
-// The only dynamic value interpolated into the document is the page's own
-// origin (from `new URL(c.req.url).origin`). A URL origin cannot carry markup
-// characters today, but it is escaped anyway so nothing raw ever enters the
-// markup.
+// Dynamic values interpolated into the document are the page's own origin
+// (from `new URL(c.req.url).origin`) and the build version. A URL origin
+// cannot carry markup characters today, but both are escaped anyway so nothing
+// raw ever enters the markup.
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (char) => {
     switch (char) {
@@ -38,6 +38,12 @@ const escapeHtml = (value: string): string =>
         return '&#39;'
     }
   })
+
+// Build version shown in the footer. The route passes the deploy-injected
+// version (package.json version) or "dev" when it is not injected; the "v"
+// prefix mirrors the admin panel's version text.
+const versionLabel = (version: string): string =>
+  version === 'dev' ? 'dev' : `v${version}`
 
 const homeStyles = `
 * { box-sizing: border-box; }
@@ -302,6 +308,7 @@ const registerEntry = (mode: LX.RegistrationMode | null): string => {
 export const homePageHtml = (
   mode: LX.RegistrationMode | null,
   origin: string,
+  version = 'dev',
 ): string => `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -376,7 +383,7 @@ ${homeStyles}
     </div>
   </section>
 
-  <footer>在 LX Music 客户端里填写本页地址与账号（连接码）即可开始同步。</footer>
+  <footer>${escapeHtml(versionLabel(version))}</footer>
 </main>
 </body>
 </html>`

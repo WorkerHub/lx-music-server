@@ -21,6 +21,17 @@ const PAGE_HEADERS = {
   'x-frame-options': 'DENY',
 }
 
+// Build version is injected by the deploy workflow as a public Worker var
+// (the package.json version). Unset, blank and stringified sentinels all mean
+// "not injected"; the footer then shows "dev", matching the admin panel's
+// /api/admin/build-info fallback.
+const NOT_INJECTED = new Set(['', 'undefined', 'null'])
+const readBuildVersion = (value: string | undefined): string => {
+  if (typeof value !== 'string') return 'dev'
+  const trimmed = value.trim()
+  return NOT_INJECTED.has(trimmed.toLowerCase()) ? 'dev' : trimmed
+}
+
 // The landing page `/` renders the registration entry only when self-service
 // registration is available. The mode is read from the same registry settings
 // `GET /api/registration-info` reports, while rendering, so `closed` never
@@ -35,7 +46,11 @@ app.get('/', async (c) => {
     mode = null
   }
   return c.html(
-    homePageHtml(mode, new URL(c.req.url).origin),
+    homePageHtml(
+      mode,
+      new URL(c.req.url).origin,
+      readBuildVersion(c.env.BUILD_VERSION),
+    ),
     200,
     PAGE_HEADERS,
   )
