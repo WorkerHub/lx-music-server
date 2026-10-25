@@ -71,26 +71,18 @@ Secrets：
 | 名称 | 说明 |
 |---|---|
 | `CLOUDFLARE_API_TOKEN` | 上一步创建的 API Token |
-| `LX_USERS` | 用户配置（**必填，非空**；仅用于首次播种，见下一节） |
-| `LX_ADMIN_PASSWORD_HASH` | 管理面板密码的 SHA-256（**必填**，见「管理面板」） |
+| `LX_USERS` | 用户配置（**可选**；一次性播种源，线上已播种可不配，若配须为合法 JSON 数组） |
+| `LX_ADMIN_PASSWORD_HASH` | 管理面板密码的 SHA-256（**可选**；为空即整体关闭 /admin（404）） |
 
-### 4. 配置用户（LX_USERS，必填／非空，仅首次播种）
+### 4. 配置用户（LX_USERS，可选，仅首次播种）
 
-- **新部署**：`LX_USERS` 为**必填（非空）**。请至少配置一个用户（简单或 JSON 格式均可）；缺失或为空会导致部署失败。
-- **从旧版本升级**：请在部署新版**之前**先配置 `LX_ADMIN_PASSWORD_HASH`（管理面板密码的 SHA-256，**必填**；缺失或格式非法会导致部署失败）。
-- **部署新版之后**：打开 `/admin` 确认旧用户都已存在（一次性导入已完成），**再**删除 `LX_USERS` Secret。此后新增/删除用户、重置密码都在管理面板操作。
+- **新部署**：`LX_USERS` 为**可选**——它是**一次性播种源**，线上实例早已播种可不配；若要配置，必须是合法 JSON 数组（缺失或为空不会导致部署失败，会跳过播种）。
+- **从旧版本升级**：`LX_ADMIN_PASSWORD_HASH` 为**可选**（为空即整体关闭 /admin，返回 404）。若已在用 `/admin` 面板，请在部署新版**之前**先配置它（管理面板密码的 SHA-256）；配置了但格式非法会导致部署失败。
+- **部署新版之后**：打开 `/admin` 确认旧用户都已存在（一次性导入已完成），**再**删除 `LX_USERS` Secret（若当初配置了）。此后新增/删除用户、重置密码都在管理面板操作。
 
-以下正文说明 `LX_USERS` 的两种格式与安全注意事项，仅在首次播种（含旧版本升级）时需要了解。
+以下正文说明 `LX_USERS` 的格式与安全注意事项，仅在首次播种（含旧版本升级）时需要了解。
 
-`LX_USERS` 以 **Secret** 形式下发（部署时由 GitHub Actions 通过 `wrangler deploy --secrets-file` 写入，不再写进 `wrangler.toml` 的 `[vars]`，因此不会明文出现在 Cloudflare 控制台的变量列表里）。支持两种格式。
-
-简单格式（用户名:密码，逗号分隔）：
-
-```text
-admin:your_password,alice:her_password
-```
-
-JSON 格式（可扩展选项，支持密码哈希）：
+`LX_USERS` 以 **Secret** 形式下发（部署时由 GitHub Actions 通过 `wrangler deploy --secrets-file` 写入，不再写进 `wrangler.toml` 的 `[vars]`，因此不会明文出现在 Cloudflare 控制台的变量列表里）。只支持 JSON 数组一种格式，且必须是合法 JSON 数组：
 
 ```json
 [{"name":"admin","passwordHash":"5f4dcc3b5aa765d61d8327deb882cf99"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
@@ -117,7 +109,7 @@ JSON 格式（可扩展选项，支持密码哈希）：
 >
 > 存 `passwordHash` 能避免明文密码落在 Cloudflare 控制台，但它仍是「密码等价的派生值」——拿到它的人依然能用该账号认证与同步。因此无论用哪种形式，都务必使用高强度随机密码。
 
-`LX_USERS` 只在**首次部署**时被一次性导入注册表（用户落为「active / 导入」），之后注册表就是唯一准据：再改 `LX_USERS` 不会影响已存在的用户，新增/删除/改密请在管理面板操作。`LX_USERS` 必须非空：缺失或为空时部署会直接失败。
+`LX_USERS` 只在**首次部署**时被一次性导入注册表（用户落为「active / 导入」），之后注册表就是唯一准据：再改 `LX_USERS` 不会影响已存在的用户，新增/删除/改密请在管理面板操作。`LX_USERS` 为可选（一次性播种源）：线上已播种可不配；若配，必须是合法 JSON 数组，缺失或为空时跳过播种、部署继续。
 
 ### 5. 触发部署
 
@@ -162,9 +154,9 @@ printf 'your_admin_password' | shasum -a 256
 node -e "console.log(require('crypto').createHash('sha256').update('your_admin_password').digest('hex'))"
 ```
 
-2. 把 64 位十六进制结果写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署。**该 Secret 为必填：未配置（或不是合法的 64 位十六进制 SHA-256）时部署直接失败**，不会以「面板禁用」的状态静默上线。
+2. 把 64 位十六进制结果写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署。**该 Secret 为可选：为空即整体关闭 /admin（返回 404）**；配置了但不是合法的 64 位十六进制 SHA-256 时部署仍会失败。
 
-> 注意 Secret 的删除行为：从 GitHub Secrets 里删除并重新部署**不会**删除 Worker 上已有的 Secret（`wrangler deploy --secrets-file` 只增改、不删除）。轮换管理员密码请直接写入新哈希并重新部署；如需彻底移除，执行 `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH`（此后部署会因缺少该必填 Secret 而失败，面板也不再可用）。
+> 注意 Secret 的删除行为：从 GitHub Secrets 里删除并重新部署**不会**删除 Worker 上已有的 Secret（`wrangler deploy --secrets-file` 只增改、不删除）。轮换管理员密码请直接写入新哈希并重新部署；如需彻底移除，执行 `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH`（此后部署不再写入该 Secret，面板不再可用）。
 
 面板能力：
 
@@ -221,7 +213,7 @@ LX_USERS='[{"name":"admin","password":"your_password"}]'
 LX_ADMIN_PASSWORD_HASH='<管理员密码的 64 位 SHA-256>'
 ```
 
-`LX_USERS` 为必填（非空），只用于首次播种；`LX_ADMIN_PASSWORD_HASH` 为必填项，缺失或格式不合法时部署工作流直接失败（本地 `pnpm dev` 未配置它时，面板与 `/api/admin/*` 返回 404）。
+`LX_USERS` 为可选（一次性播种源，若配须为合法 JSON 数组），只用于首次播种；`LX_ADMIN_PASSWORD_HASH` 为可选，为空即整体关闭 /admin（404），配置了但格式不合法时部署工作流仍会失败（本地 `pnpm dev` 未配置它时，面板与 `/api/admin/*` 返回 404）。
 
 项目已将 `wrangler types` 集成到脚本中，开发和部署前会自动生成类型定义。
 
@@ -241,12 +233,12 @@ pnpm deploy
 
 本次安全加固改动了部分配置与部署方式，从旧版本升级时注意：
 
-1. **`LX_USERS` 从 `[vars]` 改为 Secret（旧版必需、现版本必填）**：部署不再把密码写进 `wrangler.toml`，改由 GitHub Actions 通过 `wrangler deploy --secrets-file` 下发。现版本必填（非空）；从旧版升级且要保留原有账号，请先写好该 Secret 再重新触发一次部署；本地开发请改用上面的 `.dev.vars`。
+1. **`LX_USERS` 从 `[vars]` 改为 Secret（旧版必需、现版本可选）**：部署不再把密码写进 `wrangler.toml`，改由 GitHub Actions 通过 `wrangler deploy --secrets-file` 下发。现版本可选（一次性播种源）；从旧版升级且要保留原有账号，请先写好该 Secret 再重新触发一次部署；本地开发请改用上面的 `.dev.vars`。
 2. **（可选）明文密码迁移为 `passwordHash`**：把 `LX_USERS` 里的 `password` 换成 `passwordHash`（32 位十六进制 MD5），明文密码即不再出现在配置里。生成方法见「配置用户」一节；明文 `password` 与 `passwordHash` 两种形式会继续并存支持。
 3. **新增 `RATE_LIMITER` 绑定**：`wrangler.toml` 新增了认证限流绑定，`namespace_id` 需在账号内唯一，如与现有 Worker 冲突请修改后再部署。
 4. **`SERVER_NAME` 保留在 `[vars]`**：非敏感显示名仍留在 `wrangler.toml` 的 `[vars]` 中，可在控制台直接查看/修改。
-5. **用户注册表迁移到 Registry DO**：新增 `UserRegistryDO` 与 `v2` migration（部署时自动应用），首次启动会把 `LX_USERS` 里的用户一次性导入注册表（落 `active` / `source=imported`），之后注册表是唯一准据。`LX_USERS` 旧版必需、现版本必填（非空，仅作首次播种）：为空时部署直接失败。旧客户端无需改动，`/ah`、`/socket`、`/devices` 协议与返回不变。
-6. **`LX_ADMIN_PASSWORD_HASH` 为必填 Secret**：用于启用 `/admin` 管理面板。部署工作流会校验其为 64 位十六进制 SHA-256，未配置或格式不合法时部署直接失败。从旧版升级请先生成并写入该 Secret，再触发部署。
+5. **用户注册表迁移到 Registry DO**：新增 `UserRegistryDO` 与 `v2` migration（部署时自动应用），首次启动会把 `LX_USERS` 里的用户一次性导入注册表（落 `active` / `source=imported`），之后注册表是唯一准据。`LX_USERS` 现版本可选（一次性播种源）：线上已播种可不配，缺失或为空时跳过播种、部署继续。旧客户端无需改动，`/ah`、`/socket`、`/devices` 协议与返回不变。
+6. **`LX_ADMIN_PASSWORD_HASH` 为可选 Secret**：用于启用 `/admin` 管理面板。为空即整体关闭 /admin（404）；配置了部署工作流会校验其为 64 位十六进制 SHA-256，格式不合法时部署直接失败。从旧版升级如需面板，请先生成并写入该 Secret，再触发部署。
 
 ## 技术架构
 
@@ -278,7 +270,7 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：
 
-- `KV_NAMESPACE_ID` 放在 **Variables**（非密钥）；`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 与 `LX_USERS` 放在 **Secrets**（`LX_USERS` 必填，非空）
+- `KV_NAMESPACE_ID` 放在 **Variables**（非密钥）；`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 与 `LX_USERS` 放在 **Secrets**（`LX_USERS`、`LX_ADMIN_PASSWORD_HASH` 均为可选）
 
 如果把 Variables 和 Secrets 混淆，部署会直接失败。
 
