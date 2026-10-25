@@ -105,6 +105,21 @@ export const transitionUser = async (
   )
 }
 
+export const touchUserLastSeen = async (
+  env: LX.Env,
+  name: string,
+): Promise<{ updated: boolean; lastSeenAt: number } | null> => {
+  const response = await request(
+    env,
+    `/users/${encodeURIComponent(name)}/last-seen`,
+    { method: 'POST' },
+  )
+  if (response.status === 404) return null
+  if (!response.ok)
+    throw new Error(`registry last seen failed: ${response.status}`)
+  return readJson<{ updated: boolean; lastSeenAt: number }>(response)
+}
+
 export const tombstoneUser = async (
   env: LX.Env,
   name: string,

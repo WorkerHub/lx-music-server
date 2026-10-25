@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { SYNC_CODE } from '@/constants'
-import { getUser, listAuthUsers } from '@/registry/client'
+import { getUser, listAuthUsers, touchUserLastSeen } from '@/registry/client'
 import { aesDecrypt } from '@/utils/crypto'
 import { getKeySeed } from '@/utils/password'
 import { isRateLimited } from '@/utils/rateLimit'
@@ -11,6 +11,17 @@ const app = new Hono<{ Bindings: LX.Env }>()
 // `client:{id}` → userName 映射的 TTL（秒）。365 天，设备重新认证时续期，
 // 避免被删除外的所有路径留下永不过期的孤儿映射（REVIEW M5）。
 const CLIENT_MAPPING_TTL_SECONDS = 365 * 24 * 60 * 60
+
+// Best-effort last-seen bookkeeping. Authentication has already succeeded at
+// this point, so a registry hiccup must never turn the response into an error.
+// The registry DO throttles the actual write (see LAST_SEEN_WRITE_INTERVAL_MS).
+const recordLastSeen = async (env: LX.Env, name: string) => {
+  try {
+    await touchUserLastSeen(env, name)
+  } catch (err) {
+    console.error('lastSeenAt update failed:', err)
+  }
+}
 
 app.get('/ah', async (c) => {
   const ip = getClientIp(c)
@@ -64,6 +75,7 @@ app.get('/ah', async (c) => {
     await kv.put(`client:${clientId}`, userName, {
       expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
     })
+    await recordLastSeen(c.env, userName)
     return c.text(await resp.text())
   }
 
@@ -111,6 +123,7 @@ app.get('/ah', async (c) => {
     await kv.put(`client:${result.clientId}`, result.userName, {
       expirationTtl: CLIENT_MAPPING_TTL_SECONDS,
     })
+    await recordLastSeen(c.env, result.userName)
     return c.text(result.encrypted)
   }
 

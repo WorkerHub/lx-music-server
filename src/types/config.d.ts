@@ -19,6 +19,10 @@ declare namespace LX {
     status: UserStatus
     source: UserSource
     createdAt: number
+    // Epoch ms of the last successful authentication (`GET /ah`). Optional:
+    // accounts created before the field existed, or that never authenticated,
+    // have no value — consumers must treat that as `null` (never seen).
+    lastSeenAt?: number | null
   }
 
   // Tombstone left behind when an account is deleted: the sync data stays in
