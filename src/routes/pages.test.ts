@@ -438,6 +438,73 @@ describe('page markup safety', () => {
     expect(usersPanel).not.toContain('id="about-repo"')
   })
 
+  it('paginates the users list client-side (10 per page)', () => {
+    // The pager container lives between the table and the empty state, so it
+    // starts hidden and only the script can reveal it.
+    const usersPanel = adminPageHtml.slice(
+      adminPageHtml.indexOf('id="tab-panel-users"'),
+      adminPageHtml.indexOf('id="tab-panel-settings"'),
+    )
+    expect(usersPanel.indexOf('id="users-pager"')).toBeGreaterThan(
+      usersPanel.indexOf('id="users-table-wrap"'),
+    )
+    expect(usersPanel.indexOf('id="users-pager"')).toBeLessThan(
+      usersPanel.indexOf('id="users-empty"'),
+    )
+
+    // The page size is a named constant, not a magic number scattered around.
+    expect(adminPageHtml).toContain('var USER_PAGE_SIZE = 10')
+
+    // The current page starts at 1 and is reset with the rest of the session.
+    const stateBlock = adminPageHtml.slice(
+      adminPageHtml.indexOf('var state = {'),
+      adminPageHtml.indexOf('var modalState = {'),
+    )
+    expect(stateBlock).toContain('userPage: 1')
+
+    const resetData = section('function resetData', 'function endSession')
+    expect(resetData).toContain('state.userPage = 1')
+
+    // renderUsers clamps to [1, pageCount] and renders only the current slice.
+    const renderUsers = section(
+      'function renderUsers()',
+      'function renderOrphans',
+    )
+    expect(renderUsers).toContain(
+      'Math.ceil(state.users.length / USER_PAGE_SIZE)',
+    )
+    expect(renderUsers).toContain(
+      'state.users.slice(start, start + USER_PAGE_SIZE)',
+    )
+    expect(
+      renderUsers.indexOf('if (state.userPage < 1) state.userPage = 1'),
+    ).toBeLessThan(renderUsers.indexOf('state.users.slice(start'))
+    expect(
+      renderUsers.indexOf(
+        'if (state.userPage > pageCount) state.userPage = pageCount',
+      ),
+    ).toBeLessThan(renderUsers.indexOf('state.users.slice(start'))
+
+    // Controls are built with el()/button(), never concatenated HTML strings.
+    const ensurePager = section(
+      'function ensureUsersPager()',
+      'function renderUsersPager',
+    )
+    expect(ensurePager).toContain("button('上一页', 'btn sm'")
+    expect(ensurePager).toContain("button('下一页', 'btn sm'")
+    expect(ensurePager).toContain("el('span', 'pager-info')")
+
+    // The pager is shown only when more than one page of users exists, and the
+    // prev/next disabled states track the first/last page.
+    const renderUsersPager = section(
+      'function renderUsersPager',
+      'function renderUsers()',
+    )
+    expect(renderUsersPager).toContain('state.users.length > USER_PAGE_SIZE')
+    expect(renderUsersPager).toContain('state.userPage <= 1')
+    expect(renderUsersPager).toContain('state.userPage >= pageCount')
+  })
+
   it('expands the admin panel to four tabs in a fixed order', () => {
     const tabs: Array<[string, string, string]> = [
       ['home', '首页', "'#home'"],
