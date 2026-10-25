@@ -28,11 +28,11 @@ jobs:
 
       - name: Prepare config and secrets file
         env:
-          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           LX_USERS: ${{ secrets.LX_USERS }}
           LX_ADMIN_PASSWORD_HASH: ${{ secrets.LX_ADMIN_PASSWORD_HASH }}
         run: |
-          # LX_USERS secret 格式（可选，仅用于首次播种；播种后由 Registry DO 管理用户）:
+          # LX_USERS secret 格式（必填，非空；仅用于首次播种；播种后由 Registry DO 管理用户）:
           #   简单模式: user1:password1,user2:password2
           #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           #   JSON 模式也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
@@ -43,8 +43,11 @@ jobs:
           python3 - <<'EOF'
           import os, json, re, sys
 
-          # Inject the KV namespace id into wrangler.toml (config, not secret).
-          kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "")
+          # KV_NAMESPACE_ID 来自仓库 Variable（vars），非 Secret。
+          kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "").strip()
+          if not kv_namespace_id:
+              print("::error:: KV_NAMESPACE_ID is required: set the repository Variable (vars.KV_NAMESPACE_ID) to the KV namespace id", file=sys.stderr)
+              sys.exit(1)
           with open('wrangler.toml', 'r') as f:
               content = f.read()
           content = content.replace('KV_NAMESPACE_ID_PLACEHOLDER', kv_namespace_id)
@@ -54,9 +57,11 @@ jobs:
           # Build the LX_USERS secret value (a JSON array string) and write it to
           # a secrets file that wrangler deploy uploads alongside the code. This
           # keeps plaintext passwords out of wrangler.toml [vars], which are
-          # visible in the Cloudflare dashboard. An empty LX_USERS is allowed:
-          # the registry seeds an empty roster and the admin panel creates users.
+          # visible in the Cloudflare dashboard. LX_USERS is required (non-empty).
           raw = os.environ.get("LX_USERS", "").strip()
+          if not raw:
+              print("::error:: LX_USERS is required: set the repository secret to a non-empty user list", file=sys.stderr)
+              sys.exit(1)
           users = []
           if raw:
               if raw.startswith("["):
@@ -103,7 +108,13 @@ jobs:
               sys.exit(1)
           secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
 
-          with open('.secrets.json', 'w') as f:
+          runner_temp = os.environ.get("RUNNER_TEMP", "")
+          if not runner_temp:
+              print("::error:: RUNNER_TEMP is not set in the environment", file=sys.stderr)
+              sys.exit(1)
+          secrets_path = os.path.join(runner_temp, "secrets.json")
+          fd = os.open(secrets_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+          with os.fdopen(fd, 'w') as f:
               json.dump(secrets, f)
           EOF
 
@@ -119,7 +130,7 @@ jobs:
           BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "build info: version=$BUILD_VERSION commit=$BUILD_COMMIT builtAt=$BUILD_TIME"
           pnpm wrangler deploy \
-            --secrets-file .secrets.json \
+            --secrets-file "$RUNNER_TEMP/secrets.json" \
             --var "BUILD_VERSION:$BUILD_VERSION" \
             --var "BUILD_COMMIT:$BUILD_COMMIT" \
             --var "BUILD_TIME:$BUILD_TIME" 2>&1 | sed -E \
