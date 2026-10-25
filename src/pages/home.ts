@@ -40,10 +40,10 @@ const escapeHtml = (value: string): string =>
   })
 
 // Build version shown in the footer. The route passes the deploy-injected
-// version (package.json version) or "dev" when it is not injected; the "v"
-// prefix mirrors the admin panel's version text.
-const versionLabel = (version: string): string =>
-  version === 'dev' ? 'dev' : `v${version}`
+// display version ("v{version}-{build count}-{short sha}") or "dev" when it is
+// not injected. It is printed verbatim, with no prefix of our own, so the
+// landing footer matches the admin panel's footer and about page exactly.
+const versionLabel = (version: string): string => (version ? version : 'dev')
 
 const homeStyles = `
 * { box-sizing: border-box; }

@@ -1829,13 +1829,12 @@ const adminScript = `
     return typeof commit !== 'string' || commit === '' || commit === 'dev'
   }
 
-  function shortCommit(commit) {
-    return commit.length > 7 ? commit.slice(0, 7) : commit
-  }
-
+  // The deploy-injected version already is the full display string
+  // ("v{version}-{build count}-{short sha}"), so it is shown verbatim: no extra
+  // "v" prefix and no separately appended short commit. Reformatting here is
+  // what used to make the footer disagree with the about page.
   function versionText() {
-    var version = buildVersion()
-    return version === 'dev' ? 'dev' : 'v' + version
+    return buildVersion()
   }
 
   async function loadBuildInfo(epoch) {
@@ -1863,7 +1862,7 @@ const adminScript = `
       line.hidden = true
       return
     }
-    line.textContent = versionText() + ' · ' + shortCommit(buildCommit())
+    line.textContent = versionText()
     line.hidden = false
   }
 
