@@ -152,6 +152,19 @@ h2 {
   flex-wrap: wrap;
 }
 .section-head .muted { font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); }
+/* --- Users pager ---------------------------------------------------------- */
+/* 上一页 / 下一页分页控件：左按钮、右按钮、中间页码信息。沿用 .btn.sm 与
+   muted 排版，横向排布与 .section-head 对齐一致；小屏可换行，按钮不溢出。 */
+.pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--lx-space-3); margin-top: var(--lx-space-4); flex-wrap: wrap;
+}
+.pager-info {
+  flex: 1; text-align: center;
+  color: var(--lx-muted);
+  font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh);
+  font-variant-numeric: tabular-nums;
+}
 .login-card { max-width: 420px; margin: var(--lx-space-7) auto; }
 .login-card .muted { font-size: var(--lx-text-small-size); line-height: var(--lx-text-small-lh); margin: var(--lx-space-1) 0 var(--lx-space-4); }
 .login-card .stack { gap: var(--lx-space-4); }
@@ -774,6 +787,7 @@ const adminScript = `
   var TABS = { home: '#home', users: '#users', settings: '#settings', about: '#about' }
   var DEFAULT_TAB = 'home'
   var ACTIVITY_DAYS = 30
+  var USER_PAGE_SIZE = 10
   var UNKNOWN = '—'
   // Persistence key for the theme choice; the value is the mode itself
   // ('light' | 'dark' | 'auto') so it stays readable from the head script.
@@ -788,6 +802,10 @@ const adminScript = `
 
   var state = {
     users: [],
+    // Current page of the users table (1-based). Clamped on every render so a
+    // list that shrinks (delete / approve / disable) never leaves the table on
+    // an out-of-range page.
+    userPage: 1,
     orphans: [],
     // Only true after the matching list request succeeded. Both the dashboard
     // and the two tables render "unknown" instead of stale rows or a
@@ -1089,6 +1107,7 @@ const adminScript = `
     // Any request already in flight belongs to the session that just ended.
     sessionEpoch++
     state.users = []
+    state.userPage = 1
     state.orphans = []
     state.usersLoaded = false
     state.orphansLoaded = false
@@ -1249,6 +1268,45 @@ const adminScript = `
     await loadOrphans(epoch)
   }
 
+  // The pager controls are built once with el()/button() (never HTML strings)
+  // and only their text / disabled / hidden flags change on each render, so
+  // the prev/next buttons keep their keyboard focus across page turns.
+  var usersPager = null
+
+  function ensureUsersPager() {
+    if (usersPager) return usersPager
+    var pager = $('users-pager')
+    var prev = button('上一页', 'btn sm', function () {
+      if (state.userPage > 1) {
+        state.userPage--
+        renderUsers()
+      }
+    })
+    var info = el('span', 'pager-info')
+    var next = button('下一页', 'btn sm', function () {
+      if (state.userPage < Math.ceil(state.users.length / USER_PAGE_SIZE)) {
+        state.userPage++
+        renderUsers()
+      }
+    })
+    pager.appendChild(prev)
+    pager.appendChild(info)
+    pager.appendChild(next)
+    usersPager = { prev: prev, info: info, next: next, pager: pager }
+    return usersPager
+  }
+
+  function renderUsersPager() {
+    var pageCount = Math.max(1, Math.ceil(state.users.length / USER_PAGE_SIZE))
+    var show = state.usersLoaded && state.users.length > USER_PAGE_SIZE
+    var p = ensureUsersPager()
+    p.pager.hidden = !show
+    if (!show) return
+    p.prev.disabled = state.userPage <= 1
+    p.next.disabled = state.userPage >= pageCount
+    p.info.textContent = '第 ' + state.userPage + ' / ' + pageCount + ' 页'
+  }
+
   function renderUsers() {
     var body = $('users-body')
     clear(body)
@@ -1258,12 +1316,19 @@ const adminScript = `
     $('users-unavailable').hidden = loaded
     renderUsersCount()
     $('users-empty').hidden = !loaded || state.users.length > 0
+    var pageCount = Math.max(1, Math.ceil(state.users.length / USER_PAGE_SIZE))
+    if (state.userPage < 1) state.userPage = 1
+    if (state.userPage > pageCount) state.userPage = pageCount
+    renderUsersPager()
     if (!loaded) {
       renderHome()
       return
     }
 
-    state.users.forEach(function (user) {
+    var start = (state.userPage - 1) * USER_PAGE_SIZE
+    var page = state.users.slice(start, start + USER_PAGE_SIZE)
+
+    page.forEach(function (user) {
       var row = el('tr', 'user-row')
       row.appendChild(cell('用户名', 'name-cell', user.name))
 
@@ -2757,6 +2822,7 @@ ${adminStyles}
             <tbody id="users-body"></tbody>
           </table>
         </div>
+        <div class="pager" id="users-pager" hidden></div>
         <p class="empty" id="users-empty" hidden>还没有用户，用下面的表单添加第一个。</p>
         <p class="data-unavailable" id="users-unavailable" hidden>用户列表暂时不可用，请刷新后重试。刷新成功前不会对旧数据执行任何操作。</p>
       </section>
