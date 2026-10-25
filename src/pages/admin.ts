@@ -1340,6 +1340,10 @@ const adminScript = `
 
       row.appendChild(cell('来源', null, labelFrom(SOURCE_LABELS, user.source)))
       row.appendChild(cell('创建时间', 'muted', formatTime(user.createdAt)))
+      // lastSeenAt 是 GET /api/admin/users 返回的 epoch 毫秒字段，null = 从未登录。
+      // formatTime 自己就把 null / undefined / 空串 / 非法值渲染成「—」占位符，
+      // 所以这里直接复用，不另造一套判空与格式化分支。
+      row.appendChild(cell('最后登录', 'muted', formatTime(user.lastSeenAt)))
 
       var deviceCount = user.deviceCount
       var deviceCell = cell(
@@ -2814,6 +2818,7 @@ ${adminStyles}
                 <th>状态</th>
                 <th>来源</th>
                 <th>创建时间</th>
+                <th>最后登录</th>
                 <th>设备数</th>
                 <th>快照上限</th>
                 <th class="actions-col">操作</th>
