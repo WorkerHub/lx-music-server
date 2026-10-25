@@ -520,6 +520,195 @@ describe('page markup safety', () => {
     expect(renderUsersPager).toContain('state.userPage >= pageCount')
   })
 
+  it('renders 最后登录 right after 创建时间 in the users table', () => {
+    const usersPanel = adminPageHtml.slice(
+      adminPageHtml.indexOf('id="tab-panel-users"'),
+      adminPageHtml.indexOf('id="tab-panel-settings"'),
+    )
+    // The header pins the whole column order, so the new column can neither
+    // drift away from 创建时间 nor silently push another column out.
+    const headerCells = (usersPanel.match(/<th[^>]*>[^<]*<\/th>/g) ?? []).map(
+      (cell) => cell.replace(/<[^>]+>/g, ''),
+    )
+    expect(headerCells).toEqual([
+      '用户名',
+      '状态',
+      '来源',
+      '创建时间',
+      '最后登录',
+      '设备数',
+      '快照上限',
+      '操作',
+    ])
+
+    // Each row emits the same cells in the same order. lastSeenAt comes from
+    // GET /api/admin/users as epoch ms (null = 从未登录) and goes through
+    // formatTime, the single place that turns a missing value into 「—」.
+    const renderUsers = section(
+      'function renderUsers()',
+      'function addUserActions',
+    )
+    const createdCell = "cell('创建时间', 'muted', formatTime(user.createdAt))"
+    const lastSeenCell =
+      "cell('最后登录', 'muted', formatTime(user.lastSeenAt))"
+    expect(renderUsers).toContain(createdCell)
+    expect(renderUsers).toContain(lastSeenCell)
+    expect(renderUsers.indexOf(createdCell)).toBeLessThan(
+      renderUsers.indexOf(lastSeenCell),
+    )
+    // Header and body stay the same width: 8 cells per row.
+    expect(renderUsers.match(/row\.appendChild\(/g) ?? []).toHaveLength(8)
+
+    // Behaviour, not only source: run formatTime itself, so 「从未登录 → —」 and
+    // 「有值 → 本地时间字符串」 are pinned the way a browser would see them.
+    const formatTimeFn = section('function formatTime', 'function labelFrom')
+    const formatTime = new Function(`${formatTimeFn}\nreturn formatTime`)() as (
+      value: unknown,
+    ) => string
+    expect(formatTime(null)).toBe('—')
+    expect(formatTime(undefined)).toBe('—')
+    const seenAt = Date.UTC(2025, 0, 2, 3, 4, 5)
+    const rendered = formatTime(seenAt)
+    expect(rendered).not.toBe('—')
+    expect(rendered).not.toContain('Invalid')
+    expect(rendered).toContain(':')
+    expect(rendered).toBe(
+      new Date(seenAt).toLocaleString('zh-CN', { hour12: false }),
+    )
+  })
+
+  it('paints the 最后登录 cell from lastSeenAt, with a placeholder when never seen', () => {
+    // The row is the deliverable, so renderUsers() runs against a fake DOM
+    // instead of being pinned by string matching: a source assertion would
+    // stay green for any expression that still renders the wrong cell.
+    const source = section('function renderUsers()', 'function addUserActions')
+    const makeNode = (tag = 'div'): any => {
+      const node: any = {
+        tagName: tag,
+        className: '',
+        textContent: '',
+        title: '',
+        type: '',
+        hidden: false,
+        disabled: false,
+        children: [],
+      }
+      node.firstChild = null
+      node.appendChild = (child: any) => {
+        node.children.push(child)
+        node.firstChild = node.children[0] ?? null
+        return child
+      }
+      node.removeChild = (child: any) => {
+        const index = node.children.indexOf(child)
+        if (index >= 0) node.children.splice(index, 1)
+        node.firstChild = node.children[0] ?? null
+        return child
+      }
+      node.setAttribute = (key: string, value: string) => {
+        node[key] = value
+      }
+      node.addEventListener = () => {}
+      return node
+    }
+    const document = { createElement: (tag: string) => makeNode(tag) }
+    const nodes: Record<string, any> = {}
+    const $ = (id: string) => {
+      nodes[id] = nodes[id] ?? makeNode()
+      return nodes[id]
+    }
+    const formatTime = new Function(
+      `${section('function formatTime', 'function labelFrom')}\nreturn formatTime`,
+    )() as (value: unknown) => string
+    const el = (tag: string, className?: string, text?: string) => {
+      const node = makeNode(tag)
+      if (className) node.className = className
+      if (text !== undefined && text !== null) node.textContent = String(text)
+      return node
+    }
+    const cell = (label: string, className: string | null, text?: string) => {
+      const node = el('td', className ?? undefined, text)
+      node.setAttribute('data-label', label)
+      return node
+    }
+    const user = (name: string, lastSeenAt: number | null) => ({
+      name,
+      status: 'active',
+      source: 'self',
+      createdAt: '2025-01-02T03:04:05Z',
+      lastSeenAt,
+      deviceCount: 1,
+      maxSnapshotNum: null,
+    })
+    const seenAt = Date.UTC(2025, 2, 4, 5, 6, 7)
+    const state = {
+      usersLoaded: true,
+      users: [user('seen', seenAt), user('never', null)],
+      userPage: 1,
+    }
+    const renderUsers = new Function(
+      'state',
+      'USER_PAGE_SIZE',
+      '$',
+      'document',
+      'clear',
+      'el',
+      'cell',
+      'formatTime',
+      'labelFrom',
+      'STATUS_LABELS',
+      'SOURCE_LABELS',
+      'statusClass',
+      'renderUsersCount',
+      'ensureUsersPager',
+      'renderUsersPager',
+      'addUserActions',
+      'renderHome',
+      `${source}\nreturn renderUsers`,
+    )(
+      state,
+      10,
+      $,
+      document,
+      (node: any) => {
+        node.children = []
+        node.firstChild = null
+      },
+      el,
+      cell,
+      formatTime,
+      (map: Record<string, string>, value: string) =>
+        map[value] || String(value || '未知'),
+      { active: '正常', pending: '待批准', disabled: '已禁用' },
+      { imported: '部署导入', self: '自助注册', admin: '管理员添加' },
+      () => '',
+      () => {},
+      () => ({}),
+      () => {},
+      () => {},
+      () => {},
+    ) as () => void
+    renderUsers()
+
+    const rows = $('users-body').children
+    expect(rows).toHaveLength(2)
+    const labelOf = (tr: any, label: string) =>
+      tr.children.findIndex((td: any) => td['data-label'] === label)
+    const cellOf = (tr: any, label: string) =>
+      tr.children.find((td: any) => td['data-label'] === label)
+    for (const tr of rows) {
+      // The new column keeps the header order: right after 创建时间.
+      expect(labelOf(tr, '最后登录')).toBe(labelOf(tr, '创建时间') + 1)
+      expect(tr.children).toHaveLength(8)
+    }
+    // A user who authenticated shows the formatted local time...
+    expect(cellOf(rows[0], '最后登录').textContent).toBe(formatTime(seenAt))
+    expect(cellOf(rows[0], '最后登录').className).toBe('muted')
+    expect(cellOf(rows[0], '最后登录').textContent).not.toBe('—')
+    // ...while a user without lastSeenAt (null) gets the 「—」placeholder.
+    expect(cellOf(rows[1], '最后登录').textContent).toBe('—')
+  })
+
   it('expands the admin panel to four tabs in a fixed order', () => {
     const tabs: Array<[string, string, string]> = [
       ['home', '首页', "'#home'"],
@@ -1858,7 +2047,7 @@ describe('admin panel layout and about page polish (WK-22)', () => {
       '.users-table .row-actions { justify-content: flex-start; flex-wrap: nowrap; }',
     )
     expect(usersTableCss).not.toContain('justify-content: flex-end')
-    // 7 列表头与内容均左对齐：用户表块内不再有右对齐规则。
+    // 8 列表头与内容均左对齐：用户表块内不再有右对齐规则。
     expect(usersTableCss).not.toContain('text-align: right')
     expect(usersTableCss).not.toContain('actions-col')
     // 内边距按 4px 阶梯（space-2 / space-3）令牌化，横向滚动容器保留。
