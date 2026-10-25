@@ -452,6 +452,10 @@ tbody tr:last-child td { border-bottom: none; }
   outline: none;
 }
 .notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lx-space-2);
   border-radius: var(--lx-radius-sm);
   padding: var(--lx-space-2) var(--lx-space-3);
   margin-bottom: var(--lx-space-4);
@@ -463,6 +467,13 @@ tbody tr:last-child td { border-bottom: none; }
 .notice.ok { background: var(--lx-ok-bg); color: var(--lx-ok-text); border-color: var(--lx-ok-border); }
 .notice.warn { background: var(--lx-warn-bg); color: var(--lx-warn-text); border-color: var(--lx-warn-border); }
 .notice.err { background: var(--lx-danger-bg); color: var(--lx-danger-text); border-color: var(--lx-danger-border); }
+/* 提示条关闭按钮复用 .icon-btn 的 muted/hover/focus 行为，仅缩小到提示条文字尺寸
+   （.icon-btn 本体 24px 供 modal 标题用，这里不能沿用）。 */
+.notice .icon-btn {
+  flex-shrink: 0;
+  font-size: var(--lx-text-body-size);
+  padding: var(--lx-space-1);
+}
 
 /* --- Modal --------------------------------------------------------------- */
 .modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: var(--lx-space-4); z-index: 20; }
@@ -995,7 +1006,7 @@ const adminScript = `
   var noticeTimer = null
   function notice(text, kind) {
     var node = $('notice')
-    node.textContent = text
+    $('notice-text').textContent = text
     node.className = 'notice' + (kind ? ' ' + kind : '')
     node.hidden = false
     if (noticeTimer) clearTimeout(noticeTimer)
@@ -2478,6 +2489,13 @@ const adminScript = `
     })
 
     $('modal-close').addEventListener('click', closeModal)
+    $('notice-close').addEventListener('click', function () {
+      $('notice').hidden = true
+      if (noticeTimer) {
+        clearTimeout(noticeTimer)
+        noticeTimer = null
+      }
+    })
     $('modal-cancel').addEventListener('click', closeModal)
     $('modal-submit').addEventListener('click', runModalSubmit)
     document.querySelector('.modal-backdrop').addEventListener('click', closeModal)
@@ -2621,7 +2639,10 @@ ${adminStyles}
 
   <p class="muted center" id="boot">正在加载…</p>
   <noscript><p class="form-error">管理面板需要启用 JavaScript。</p></noscript>
-  <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+  <div class="notice" id="notice" role="status" aria-live="polite" hidden>
+    <span id="notice-text"></span>
+    <button class="icon-btn" id="notice-close" type="button" aria-label="关闭">×</button>
+  </div>
 
   <section class="card login-card" id="login-view" hidden>
     <p class="eyebrow">Admin · Sign in</p>
