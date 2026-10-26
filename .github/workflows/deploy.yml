@@ -49,10 +49,10 @@ jobs:
           python3 - <<'EOF'
           import os, json, re, sys
 
-          # KV_NAMESPACE_ID 来自仓库 Variable（vars），非 Secret。
+          # KV_NAMESPACE_ID 来自仓库 Secret（secrets），GitHub 会在日志中自动打码。
           kv_namespace_id = os.environ.get("KV_NAMESPACE_ID", "").strip()
           if not kv_namespace_id:
-              print("::error:: KV_NAMESPACE_ID is required: set the repository Variable (vars.KV_NAMESPACE_ID) to the KV namespace id", file=sys.stderr)
+              print("::error:: KV_NAMESPACE_ID is required: set the repository Secret (secrets.KV_NAMESPACE_ID) to the KV namespace id", file=sys.stderr)
               sys.exit(1)
           with open('wrangler.toml', 'r') as f:
               content = f.read()

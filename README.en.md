@@ -60,16 +60,11 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 In **Settings -> Secrets and variables -> Actions**, add:
 
-Variables:
-
-| Name | Description |
-|---|---|
-| `KV_NAMESPACE_ID` | KV namespace ID (**not a secret**, use a Variable) |
-
 Secrets:
 
 | Name | Description |
 |---|---|
+| `KV_NAMESPACE_ID` | KV namespace ID (stored as a Secret; GitHub masks it in logs) |
 | `CLOUDFLARE_API_TOKEN` | API token from step 2 |
 | `LX_USERS` | User config list (**optional**; one-time seeding source — instances already seeded can skip it; if set, it must be a valid JSON array) |
 | `LX_ADMIN_PASSWORD_HASH` | SHA-256 of the admin panel password (**optional**; empty disables /admin entirely (404)) |
@@ -270,9 +265,9 @@ Key dependencies:
 
 Check GitHub Actions config placement first:
 
-- `KV_NAMESPACE_ID` goes in **Variables** (it is not a secret); `CLOUDFLARE_API_TOKEN`, `LX_ADMIN_PASSWORD_HASH` and `LX_USERS` go in **Secrets** (`LX_USERS` and `LX_ADMIN_PASSWORD_HASH` are both optional)
+- `KV_NAMESPACE_ID` goes in **Secrets** (not a password, but Secrets are masked in logs); `CLOUDFLARE_API_TOKEN`, `LX_ADMIN_PASSWORD_HASH` and `LX_USERS` also go in **Secrets** (`LX_USERS` and `LX_ADMIN_PASSWORD_HASH` are both optional)
 
-If Variables and Secrets are mixed up, deployment will fail.
+If any of them is placed under Variables instead, deployment will fail.
 
 ### 2. I changed `LX_USERS`, but users did not update. Why?
 
