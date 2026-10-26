@@ -60,16 +60,11 @@
 
 在仓库 **Settings -> Secrets and variables -> Actions** 中添加：
 
-Variables：
-
-| 名称 | 说明 |
-|---|---|
-| `KV_NAMESPACE_ID` | KV Namespace ID（**非密钥**，用 Variable） |
-
 Secrets：
 
 | 名称 | 说明 |
 |---|---|
+| `KV_NAMESPACE_ID` | KV Namespace ID（放 Secret；GitHub 会在日志中自动打码） |
 | `CLOUDFLARE_API_TOKEN` | 上一步创建的 API Token |
 | `LX_USERS` | 用户配置（**可选**；一次性播种源，线上已播种可不配，若配须为合法 JSON 数组） |
 | `LX_ADMIN_PASSWORD_HASH` | 管理面板密码的 SHA-256（**可选**；为空即整体关闭 /admin（404）） |
@@ -270,9 +265,9 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：
 
-- `KV_NAMESPACE_ID` 放在 **Variables**（非密钥）；`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 与 `LX_USERS` 放在 **Secrets**（`LX_USERS`、`LX_ADMIN_PASSWORD_HASH` 均为可选）
+- `KV_NAMESPACE_ID` 放在 **Secrets**（虽非密码，但 Secrets 的值会在日志中自动打码）；`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 与 `LX_USERS` 同样放在 **Secrets**（`LX_USERS`、`LX_ADMIN_PASSWORD_HASH` 均为可选）
 
-如果把 Variables 和 Secrets 混淆，部署会直接失败。
+如果把上面任何一项放到 Variables，部署会直接失败。
 
 ### 2. 我改了 `LX_USERS` 但没有生效？
 
