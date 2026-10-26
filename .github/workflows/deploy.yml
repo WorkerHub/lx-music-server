@@ -34,7 +34,7 @@ jobs:
 
       - name: Prepare config and secrets file
         env:
-          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
           LX_USERS: ${{ secrets.LX_USERS }}
           LX_ADMIN_PASSWORD_HASH: ${{ secrets.LX_ADMIN_PASSWORD_HASH }}
         run: |
