@@ -13,6 +13,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Table of Contents
 
+- [Preview](#Preview)
 - [Why This Version](#why-this-version)
 - [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
@@ -24,6 +25,19 @@ Built for one goal: run multi-device sync without self-hosting servers.
 - [Architecture](#architecture)
 - [FAQ](#faq)
 - [License](#license)
+
+
+## Preview
+
+Home:
+<img src=".github/assets/imgs/home.webp" alt="Home" width="800">
+
+User management：
+<img src=".github/assets/imgs/home.webp" alt="User-management" width="800">
+
+Settings：
+<img src=".github/assets/imgs/home.webp" alt="Settings：" width="800">
+
 
 ## Why This Version
 

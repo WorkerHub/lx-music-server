@@ -12,7 +12,7 @@
 [English](README.en.md) ｜ [中文](README.md)
 
 ## 目录
-
+- [预览](#界面预览)
 - [为什么选这个版本](#为什么选这个版本)
 - [部署指南](#部署指南)
 - [客户端配置](#客户端配置)
@@ -24,6 +24,18 @@
 - [技术架构](#技术架构)
 - [FAQ](#faq)
 - [License](#license)
+
+
+## 界面预览
+
+首页：
+<img src=".github/assets/imgs/home.webp" alt="首页" width="800">
+
+用户管理：
+<img src=".github/assets/imgs/home.webp" alt="用户管理" width="800">
+
+系统设置：
+<img src=".github/assets/imgs/home.webp" alt="系统设置" width="800">
 
 ## 为什么选这个版本
 
