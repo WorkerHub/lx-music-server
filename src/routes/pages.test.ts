@@ -2548,6 +2548,25 @@ describe('admin panel live-feedback fixes (ONE-164)', () => {
     expect(between('.modal-backdrop {', '\n}')).toContain('position: absolute;')
   })
 
+  it('keeps the modal backdrop see-through instead of a solid sheet', () => {
+    const between = (start: string, end: string): string => {
+      const from = adminPageHtml.indexOf(start)
+      expect(from, `missing start marker: ${start}`).toBeGreaterThan(-1)
+      const to = adminPageHtml.indexOf(end, from + start.length)
+      expect(to, `missing marker after ${start}: ${end}`).toBeGreaterThan(from)
+      return adminPageHtml.slice(from, to)
+    }
+    const backdrop = between('.modal-backdrop {', '\n}')
+    // 不透明度必须写在底色里。入场动画 `lx-fade` 的终帧是 opacity: 1，配
+    // fill-mode both 会常驻生效：写在 element opacity 上的值会被终帧覆盖，
+    // 遮罩退化成纯色（暗色主题下实测整屏等于 --lx-backdrop 本身，近全黑）。
+    expect(backdrop).toContain(
+      'background: color-mix(in srgb, var(--lx-backdrop) 40%, transparent);',
+    )
+    expect(backdrop).not.toContain('opacity:')
+    expect(backdrop).toContain('animation: lx-fade')
+  })
+
   it('keeps the theme pill flush with the topbar button rhythm (rework should-fix 3)', () => {
     const between = (start: string, end: string): string => {
       const from = adminPageHtml.indexOf(start)

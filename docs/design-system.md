@@ -175,7 +175,7 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 | `--lx-muted` | `#5d6b7a` | `#98a2b3` | 次要文字 |
 | `--lx-text` | `#1b2430` | `#e6e9ee` | 正文 |
 | `--lx-heading` | `#0e141c` | `#f2f4f7` | 标题 |
-| `--lx-backdrop` | `#16202c` | `#05070a` | 弹窗遮罩底色（配 0.55 透明度使用；Stage 3 裁决增补，见 §5.4） |
+| `--lx-backdrop` | `#16202c` | `#05070a` | 弹窗遮罩底色（按 40% 不透明度使用，见 §5.5；Stage 3 裁决增补，见 §5.4） |
 
 ### 5.3 状态色（三件套：bg / border / text，图标复用 text 色）
 
@@ -195,6 +195,16 @@ export const adminTokenCss = baseTokensCss + darkTokensCss // admin 用，严禁
 - `--lx-backdrop` 新增于中性色阶（§5.2 表）。背景：Stage 2 评审发现 `.modal-backdrop` 复用 `--lx-heading`，暗色主题下该令牌反转为浅白，遮罩变成刺眼白雾。专用遮罩令牌比页面内暗色特判更符合「令牌即唯一来源」，故按契约 §9 变更流程增补本令牌（值按「与主题底色同族、略深/略深于 bg」选取），页面内不再对遮罩写主题特判。
 
 对比度（实测）：正文 `#1b2430`/`#f6f7f9` = **13.5:1**；muted `#5d6b7a`/`#ffffff` = **4.9:1**（AA ✓）；dark muted `#98a2b3`/`#1a1f26` = **7.0:1**；dark text `#e6e9ee`/`#1a1f26` = **12.6:1**。
+
+### 5.5 遮罩不透明度修订（2026-11-04 用户反馈）
+
+反馈：点开「设备」「编辑配置」等弹窗时背景变成纯暗色、近全黑；期望「变暗但仍半透明，底下内容可辨」。
+
+根因（实测）：`.modal-backdrop` 原为 `background: var(--lx-backdrop); opacity: 0.55` 叠 `animation: lx-fade … both`。`lx-fade` 终帧是 `opacity: 1`，`fill-mode: both` 在动画结束后常驻该终帧，`getComputedStyle` 读回的 `opacity` 恒为 `1`，规则里的 `0.55` 从未生效——遮罩实际以 **100%** 不透明渲染。1440×900 实测：亮色页面底 `#f6f7f9` 变成 `rgb(22,32,44)`、暗色页面底 `#0e1116` 变成 `rgb(5,7,10)`，整屏就是遮罩底色本身。
+
+修订：不透明度改写进底色 `background: color-mix(in srgb, var(--lx-backdrop) 40%, transparent)`，元素 `opacity` 不再承载透明度，入场动画淡入的即是这份半透明底色，不受终帧影响。令牌色值不变；亮/暗统一 40%，不按主题分设——根因是动画覆盖造成的 100%，而非暗色遮罩偏深，且页面内按主题给遮罩特判已被 §5.4 否决。
+
+实测（本地 dev + 真实 `/admin`，1440×900）：遮罩后页面底亮色 `rgb(157,161,167)`、暗色 `rgb(10,13,17)`；遮罩后表内用户名文字与其底色的对比度亮色 ≈ **6.4:1**、暗色 ≈ **6.5:1**（仍可读）；点击遮罩关闭弹窗仍生效。40% 为起点值，调整只改这一个百分比，勿再把透明度放回 element `opacity`。
 
 ## 6. 圆角 / 阴影 / 边框
 

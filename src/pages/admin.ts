@@ -500,8 +500,13 @@ tbody tr:last-child td { border-bottom: none; }
 /* --- Modal --------------------------------------------------------------- */
 .modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: var(--lx-space-4); z-index: 20; }
 .modal[hidden] { display: none !important; }
+/* 遮罩的不透明度写在底色里（color-mix 40%），不放在 element opacity 上：
+   入场动画 lx-fade 的终帧是 opacity: 1，配 fill-mode both 会一直生效、把
+   规则上的 opacity 覆盖掉，遮罩就退化成纯色 —— 暗色主题下即用户反馈的
+   「点开弹窗背景变纯暗色/近全黑」。底色自带透明度则不受该动画影响。 */
 .modal-backdrop {
-  position: absolute; inset: 0; background: var(--lx-backdrop); opacity: 0.55;
+  position: absolute; inset: 0;
+  background: color-mix(in srgb, var(--lx-backdrop) 40%, transparent);
   animation: lx-fade var(--lx-motion-base) var(--lx-ease-standard) both;
 }
 .modal-card {
