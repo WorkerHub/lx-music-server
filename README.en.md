@@ -13,7 +13,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Table of Contents
 
-- [Preview](#Preview)
+- [Preview](#preview)
 - [Why This Version](#why-this-version)
 - [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
@@ -29,15 +29,24 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Preview
 
-Home:
-<img src=".github/assets/imgs/home.webp" alt="Home" width="800">
+<p align="center">
+  <img src=".github/assets/screenshots/home.webp" alt="Home page: what the server does and how to connect" width="960">
+</p>
 
-User management：
-<img src=".github/assets/imgs/home.webp" alt="User-management" width="800">
-
-Settings：
-<img src=".github/assets/imgs/home.webp" alt="Settings：" width="800">
-
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src=".github/assets/screenshots/feature-admin.webp" alt="Admin panel: user list with status, source, device count and the add-user form" width="100%">
+    </td>
+    <td align="center" width="50%">
+      <img src=".github/assets/screenshots/feature-register.webp" alt="Self-service registration page: username, password and confirmation" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Admin panel <code>/admin</code></sub></td>
+    <td align="center"><sub>Registration <code>/register</code></sub></td>
+  </tr>
+</table>
 
 ## Why This Version
 

@@ -28,14 +28,24 @@
 
 ## 界面预览
 
-首页：
-<img src=".github/assets/imgs/home.webp" alt="首页" width="800">
+<p align="center">
+  <img src=".github/assets/screenshots/home.webp" alt="首页：服务器介绍、能做什么与怎么连接" width="960">
+</p>
 
-用户管理：
-<img src=".github/assets/imgs/home.webp" alt="用户管理" width="800">
-
-系统设置：
-<img src=".github/assets/imgs/home.webp" alt="系统设置" width="800">
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src=".github/assets/screenshots/feature-admin.webp" alt="管理面板：用户列表、状态、来源、设备数与添加用户" width="100%">
+    </td>
+    <td align="center" width="50%">
+      <img src=".github/assets/screenshots/feature-register.webp" alt="自助注册页：填写用户名、密码与确认密码" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>管理面板 <code>/admin</code></sub></td>
+    <td align="center"><sub>自助注册 <code>/register</code></sub></td>
+  </tr>
+</table>
 
 ## 为什么选这个版本
 
