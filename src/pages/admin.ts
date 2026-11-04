@@ -296,13 +296,29 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .actions-col { white-space: nowrap; }
 .row-actions { display: flex; gap: var(--lx-space-2); flex-wrap: nowrap; }
-/* 用户表专属布局：7 列全部左对齐；用户名列宽收缩到 18%，长用户名换行，富余宽度交给其余列。
+/* 用户表专属布局：8 列全部左对齐，列距比通用表格略紧（水平 8px），把宽度让给
+   内容；表格宽度行为的唯一目标是桌面宽度下不再需要横向滚动。
    全部选择器都限定在 .users-table 内，残留数据表与弹窗按钮布局不受影响。 */
 .users-table { table-layout: auto; width: 100%; }
-.users-table th, .users-table td { white-space: nowrap; }
-/* 用户名不再 width: 100% 吃满富余宽度：固定 18%、最小 160px，长名字换行而不是把表格撑宽。 */
-.users-table th:first-child, .users-table td:first-child { width: 18%; min-width: 160px; white-space: normal; }
+.users-table th, .users-table td {
+  white-space: nowrap;
+  padding-left: var(--lx-space-2);
+  padding-right: var(--lx-space-2);
+}
+/* 用户名不再吃 18% / 最小 160px：10ch 的列宽让常见用户名（admin、zhangsan）
+   一行放下，只有真正长的名字才换行；长名字在列内折行（.name-cell 的
+   word-break: break-all），既不撑宽表格也不截断丢字。ch 随字号缩放，不写死 px。
+   表头「用户名」沿用通用 th 的 nowrap，不跟着数据列折行。 */
+.users-table th:first-child, .users-table td:first-child { width: 10ch; min-width: 0; }
+.users-table td:first-child { white-space: normal; }
+/* 操作列在桌面宽度（≥1024，见设计系统断点）允许折行：1024–约 1140px 下按钮排成
+   两行，而不是把操作列挤出视口逼用户横向拖动；再宽一些（约 ≥1160px）仍是一行
+   排完。平板宽度（641–1023）保持设计系统约定的「保留关键列 + 横滚兜底」，行高
+   不被 5 个按钮堆成 5 行。 */
 .users-table .row-actions { justify-content: flex-start; flex-wrap: nowrap; }
+@media (min-width: 1024px) {
+  .users-table .row-actions { flex-wrap: wrap; }
+}
 
 /* --- Status badges: label type + state colour trio + text (never colour
    alone) ---------------------------------------------------------------- */
