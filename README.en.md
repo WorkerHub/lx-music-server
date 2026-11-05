@@ -72,63 +72,31 @@ Settings：
 
 ### 3. Configure GitHub Actions in your fork
 
-In **Settings -> Secrets and variables -> Actions**, add:
-
-Secrets:
+In **Settings -> Secrets and variables -> Actions**, add these Secrets (all three belong under Secrets, not Variables):
 
 | Name | Description |
 |---|---|
-| `KV_NAMESPACE_ID` | KV namespace ID (stored as a Secret; GitHub masks it in logs) |
+| `KV_NAMESPACE_ID` | KV namespace ID from step 1 (GitHub masks it in logs) |
 | `CLOUDFLARE_API_TOKEN` | API token from step 2 |
-| `LX_USERS` | User config list (**optional, legacy config from older versions**; a fresh install does not need it — only upgrades use it as a one-time seeding source; if set, it must be a valid JSON array) |
-| `LX_ADMIN_PASSWORD_HASH` | SHA-256 of the admin panel password (**optional**; empty disables /admin entirely (404)) |
+| `LX_ADMIN_PASSWORD_HASH` | **Required**: SHA-256 of the admin panel password — see the next step |
 
-### 4. Configure users (`LX_USERS`, optional, legacy config from older versions)
+> `LX_USERS` is a legacy config from older versions and **a fresh install does not need it**; if you had it configured, follow [Migration](#migration) after upgrading to verify the users were imported and then delete it.
 
-> **A fresh install does not need `LX_USERS` — skip this section.**
->
-> `LX_USERS` is a **one-time seeding source** left over from the days when older versions kept users in the deployment config: it is imported once, while the registry is empty, and afterwards the registry is authoritative and this value no longer takes part in auth. So:
->
-> - **Fresh install**: don't create `LX_USERS`. Once deployed, create accounts in the `/admin` panel (or let users self-register, depending on the registration mode).
-> - **Upgrading from an older version**: only if you actually had `LX_USERS` configured. After deploying the new version, open `/admin` and confirm all of your existing users are present (the one-time import has completed), **then** delete the secret.
+### 4. Set the admin password (`LX_ADMIN_PASSWORD_HASH`, required)
 
-#### Upgrading: one-time import, verify, then delete
+`LX_ADMIN_PASSWORD_HASH` is the login password of the `/admin` panel and **must be configured**. Sync accounts are created in that panel: without it `/admin` and `/api/admin/*` return 404, self-registration defaults to requiring admin approval, and a fresh deployment ends up with no usable account at all.
 
-1. **Before deploying (panel only)**: if you already use the `/admin` panel, configure `LX_ADMIN_PASSWORD_HASH` (the SHA-256 of the admin password) first. It is optional too: empty disables `/admin` entirely (404), while a malformed value fails the deployment.
-2. **Deploy the new version**: the registry imports the users in `LX_USERS` once on first boot (they land as `active` / `source=imported`); the server never reads it again.
-3. **After deploying, verify**: open `/admin` and confirm the users match what you expect. If any are missing, add them first (re-set `LX_USERS` and deploy, or create them in the panel) — don't delete yet.
-4. **Then delete**: remove the `LX_USERS` secret from the GitHub repo. Deleting it only stops it from being uploaded; an existing value on the Cloudflare side stays until you run `wrangler secret delete LX_USERS` (or delete it in the dashboard). Leaving it does not affect auth, because seeding has already completed.
+Generate it (16+ random characters recommended):
 
-#### `LX_USERS` format (only needed for upgrades or local development)
-
-`LX_USERS` is delivered as a **Secret** (uploaded by GitHub Actions via `wrangler deploy --secrets-file`, no longer written to `wrangler.toml` `[vars]`, so it does not show up in plaintext in the Cloudflare dashboard variables list). Only the JSON array format is supported, and it must be a valid JSON array:
-
-```json
-[{"name":"admin","passwordHash":"5f4dcc3b5aa765d61d8327deb882cf99"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
+```bash
+printf 'your_admin_password' | shasum -a 256
+# or with Node
+node -e "console.log(require('crypto').createHash('sha256').update('your_admin_password').digest('hex'))"
 ```
 
-Supported fields:
+Put the 64-char hex digest into the GitHub Secret `LX_ADMIN_PASSWORD_HASH`. The server stores only this SHA-256, never the plaintext; the value must be valid 64-char hex or the deployment fails outright.
 
-| Field | Type | Description |
-|---|---|---|
-| `name` | string | Username (required) |
-| `password` | string | Plaintext password (mutually exclusive with `passwordHash`) |
-| `passwordHash` | string | 32-char hex MD5 of the password (recommended, see Security Notes) |
-| `maxSnapshotNum` | number | Max snapshot retention, default 20 |
-| `list.addMusicLocationType` | `"top"` \| `"bottom"` | Song insert position, default `"bottom"` |
-
-> **About `passwordHash`**: the auth protocol requires the server to hold `MD5(password)` in order to decrypt the client auth packet, so `passwordHash` must be an **unsalted MD5** (32 hex chars), not a salted hash. To generate it:
->
-> ```bash
-> # macOS / Linux
-> printf 'your_password' | md5
-> # or with Node
-> node -e "console.log(require('crypto').createHash('md5').update('your_password').digest('hex'))"
-> ```
->
-> Storing `passwordHash` keeps the plaintext password out of the Cloudflare dashboard, but it is still a password-equivalent derived value — anyone who obtains it can authenticate and sync as that user. Either way, always use a strong random password.
-
-`LX_USERS` is only imported into the registry on the **first deployment** (users land as `active` / `source=imported`); after that the registry is authoritative, so editing `LX_USERS` later does not touch existing users — add, remove or reset users in the admin panel. If you do set it, it must be a valid JSON array (missing or empty does not fail the deployment; seeding is simply skipped).
+The admin password is independent of sync users: it never syncs and never occupies a sync username.
 
 ### 5. Trigger deployment
 
@@ -148,7 +116,15 @@ You can also bind a custom domain at `Settings -> Domains & Routes -> Custom Dom
 
 Before migrating from another sync server, back up local client data first.
 
-### 7. Auth and registration rate limiting
+### 7. Create sync users in the admin panel
+
+1. Open `https://<worker-url>/admin` and sign in with the admin password from step 4.
+2. Click "Add user" and fill in a username and password — this is the sync account the client will use.
+3. Enter the server URL and that account in the LX Music client and start syncing.
+
+Adding users, resetting passwords, removing devices and switching the registration mode all happen in the same panel; see [Admin Panel](#admin-panel).
+
+### 8. Auth and registration rate limiting
 
 `/ah`, `/api/register` and `/api/admin/login` all apply built-in IP rate limiting (10 requests / 60 s by default) through the shared `RATE_LIMITER` binding in `wrangler.toml`. Each endpoint uses its own key (`<ip>`, `register:<ip>`, `admin:<ip>`), so one endpoint's traffic never consumes another's quota. The binding's `namespace_id` must be unique within your Cloudflare account: if another Worker already uses `1001`, change it to an unused positive integer.
 
@@ -163,19 +139,9 @@ In LX Music sync settings:
 
 ## Admin Panel
 
-The panel lives at `https://<worker-url>/admin` and is fully separate from sync users.
+The panel lives at `https://<worker-url>/admin` and is fully separate from sync users. Sign in with the admin password whose SHA-256 you set as `LX_ADMIN_PASSWORD_HASH` (see step 4 of the deployment guide); without it the panel and `/api/admin/*` return 404.
 
-1. Generate the SHA-256 of an admin password (16+ random characters recommended):
-
-```bash
-printf 'your_admin_password' | shasum -a 256
-# or with Node
-node -e "console.log(require('crypto').createHash('sha256').update('your_admin_password').digest('hex'))"
-```
-
-2. Put the 64-char hex digest into the GitHub Secret `LX_ADMIN_PASSWORD_HASH` and redeploy. **This secret is optional: empty disables `/admin` entirely (404)** — but a malformed value (not a valid 64-char hex SHA-256) still fails the deployment.
-
-> Note how the secret is deleted: removing the GitHub Secret and redeploying does **not** delete the secret already stored on the Worker (`wrangler deploy --secrets-file` only adds/updates). To rotate the admin password, just write the new hash and redeploy; to remove it entirely, run `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH` (after that, deployments no longer write that secret, and the panel is unavailable).
+> Rotating the admin password: write the new SHA-256 into the GitHub Secret `LX_ADMIN_PASSWORD_HASH` and redeploy — existing sessions stop working immediately. Deleting the GitHub Secret **does not** delete the value already stored on the Worker (`wrangler deploy --secrets-file` only adds/updates); run `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH` to remove it entirely.
 
 What the panel does:
 
@@ -186,7 +152,7 @@ What the panel does:
 - Registration mode: `closed` / `open` / `approval` (default `approval`).
 - Device management: list and delete individual devices via the existing `/devices` data and deletion path.
 
-The self-registration page is `/register`; it first calls `GET /api/registration-info` to decide between the form and a "registration closed" notice. Passwords must be 8–128 characters; 8–15 characters are flagged as weak (16+ random characters recommended).
+The self-registration page is `/register`; registered passwords must be 8–128 characters, and 8–15 characters are flagged as weak (16+ random characters recommended).
 
 ## Device Management API
 
@@ -225,14 +191,15 @@ pnpm install
 pnpm dev
 ```
 
-`LX_USERS` is now a Secret, so for local development create a `.dev.vars` file (already git-ignored) with this content (note: this is the **file content**, not a shell command):
+Create a `.dev.vars` file (already git-ignored) containing the SHA-256 of the admin password (note: this is the **file content**, not a shell command):
 
 ```text
-LX_USERS='[{"name":"admin","password":"your_password"}]'
 LX_ADMIN_PASSWORD_HASH='<64-char SHA-256 of the admin password>'
 ```
 
-`LX_USERS` is optional (a one-time seeding source; if set it must be a valid JSON array) and only used for first-boot seeding; `LX_ADMIN_PASSWORD_HASH` is optional — empty disables `/admin` (404), and a malformed value still fails the deploy workflow (locally under `pnpm dev`, leaving it out makes the panel and `/api/admin/*` return 404).
+After `pnpm dev`, open `http://localhost:8787/admin`, sign in with that password and add a test user. Secret values are never written to `wrangler.toml`; without `LX_ADMIN_PASSWORD_HASH` the panel and `/api/admin/*` return 404 (locally too), and a malformed value fails the deploy workflow.
+
+`LX_USERS` is a one-time seeding source left over from older versions and is not needed for local development; add `LX_USERS='[{"name":"admin","password":"your_password"}]'` only when reproducing an upgrade (it must be a valid JSON array; see the appendix under Migration).
 
 `wrangler types` is integrated in scripts, so type definitions are generated before dev/deploy.
 
@@ -252,12 +219,41 @@ pnpm deploy
 
 This security hardening round changed some configuration and deployment behavior. When upgrading from an older version:
 
-1. **`LX_USERS` moved from `[vars]` to a Secret (required in older versions, optional now)**: deployment no longer writes passwords into `wrangler.toml`; GitHub Actions now uploads them via `wrangler deploy --secrets-file`. The current version treats it as an optional legacy config (a one-time seeding source) — **a fresh install does not need it**; if you are upgrading from an older version and want to keep your existing accounts, set the secret first and re-run the deployment, then delete it once the users are imported. For local development, use the `.dev.vars` file above.
-2. **(Optional) migrate plaintext passwords to `passwordHash`**: replace `password` with `passwordHash` (32-char hex MD5) in `LX_USERS` so plaintext no longer appears in config. See "Configure users" for how to generate it. Both plaintext `password` and `passwordHash` remain supported.
+1. **`LX_USERS` is legacy config from older versions — delete it after upgrading**: older versions declared users in the deployment config; the current version ships it as a Secret and imports it once on the registry's first boot (`active` / `source=imported`), after which the registry is authoritative and it no longer takes part in auth. If you had it configured: deploy the new version with the secret in place → confirm the old users are in `/admin` → delete the `LX_USERS` secret from the GitHub repo, then run `pnpm wrangler secret delete LX_USERS` (or delete it in the Cloudflare dashboard) to clear the value already on the Worker (deleting the GitHub secret alone leaves it there). **A fresh install does not need it.**
+2. **(Optional) migrate plaintext passwords to `passwordHash`**: replace `password` with `passwordHash` (32-char hex MD5) in `LX_USERS` so plaintext no longer appears in config. See the appendix below for how to generate it. Both plaintext `password` and `passwordHash` remain supported.
 3. **New `RATE_LIMITER` binding**: `wrangler.toml` now declares the auth rate-limiting binding; its `namespace_id` must be unique in your account — change it before deploying if it collides with an existing Worker.
 4. **`SERVER_NAME` stays in `[vars]`**: this non-sensitive display name remains in `wrangler.toml` `[vars]` and can be viewed/edited in the dashboard.
-5. **User registry moved to a Registry DO**: a new `UserRegistryDO` plus the `v2` migration (applied automatically on deploy). On first boot the users in `LX_USERS` are imported once (`active` / `source=imported`); afterwards the registry is the only source of truth. `LX_USERS` is optional in the current version (first-boot seeding only): instances already seeded can skip it, and missing/empty simply skips seeding and the deployment continues. Existing clients need no change: `/ah`, `/socket` and `/devices` keep their protocol and responses.
-6. **`LX_ADMIN_PASSWORD_HASH` is an optional secret**: it enables the `/admin` panel. Empty disables `/admin` entirely (404); when set, the deploy workflow validates it as a 64-char hex SHA-256 digest and fails outright when it is malformed. When upgrading from an older version and you want the panel, generate and set the secret before triggering a deployment.
+5. **User registry moved to a Registry DO**: a new `UserRegistryDO` plus the `v2` migration (applied automatically on deploy). Users are managed through the registry from then on (the legacy `LX_USERS` is imported once on first boot, see item 1). Existing clients need no change: `/ah`, `/socket` and `/devices` keep their protocol and responses.
+6. **`LX_ADMIN_PASSWORD_HASH` is the admin panel password (required)**: without it `/admin` and `/api/admin/*` return 404; a value that is not valid 64-char hex SHA-256 fails the deployment outright. Set it before deploying, for fresh installs and upgrades alike.
+
+### Appendix: `LX_USERS` format (upgrades or local development only)
+
+`LX_USERS` is delivered as a **Secret** (uploaded by GitHub Actions via `wrangler deploy --secrets-file`, no longer written to `wrangler.toml` `[vars]`, so it does not show up in plaintext in the Cloudflare dashboard variables list). Only the JSON array format is supported, and it must be a valid JSON array:
+
+```json
+[{"name":"admin","passwordHash":"5f4dcc3b5aa765d61d8327deb882cf99"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
+```
+
+Supported fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Username (required) |
+| `password` | string | Plaintext password (mutually exclusive with `passwordHash`) |
+| `passwordHash` | string | 32-char hex MD5 of the password (recommended, see [Security Notes](#security-notes)) |
+| `maxSnapshotNum` | number | Max snapshot retention, default 20 |
+| `list.addMusicLocationType` | `"top"` \| `"bottom"` | Song insert position, default `"bottom"` |
+
+> **About `passwordHash`**: the auth protocol requires the server to hold `MD5(password)` in order to decrypt the client auth packet, so `passwordHash` must be an **unsalted MD5** (32 hex chars), not a salted hash. To generate it:
+>
+> ```bash
+> # macOS / Linux
+> printf 'your_password' | md5
+> # or with Node
+> node -e "console.log(require('crypto').createHash('md5').update('your_password').digest('hex'))"
+> ```
+>
+> Storing `passwordHash` keeps the plaintext password out of the Cloudflare dashboard, but it is still a password-equivalent derived value — anyone who obtains it can authenticate and sync as that user. Either way, always use a strong random password.
 
 ## Architecture
 
@@ -287,15 +283,13 @@ Key dependencies:
 
 ### 1. Deployment failed. What should I check first?
 
-Check GitHub Actions config placement first:
+Check where the GitHub Actions items live: `KV_NAMESPACE_ID`, `CLOUDFLARE_API_TOKEN` and `LX_ADMIN_PASSWORD_HASH` all belong in **Secrets** (Secrets are masked in logs).
 
-- `KV_NAMESPACE_ID` goes in **Secrets** (not a password, but Secrets are masked in logs); `CLOUDFLARE_API_TOKEN`, `LX_ADMIN_PASSWORD_HASH` and `LX_USERS` also go in **Secrets** (`LX_USERS` and `LX_ADMIN_PASSWORD_HASH` are both optional)
-
-If any of them is placed under Variables instead, deployment will fail.
+Under Variables the deploy workflow cannot read them: a missing `KV_NAMESPACE_ID` fails the deployment outright, and a missing admin password produces a deployment with no admin panel and no way to create accounts. `LX_USERS` is legacy config from older versions; a fresh install does not need it (if set, it must be a valid JSON array).
 
 ### 2. I changed `LX_USERS`, but users did not update. Why?
 
-`LX_USERS` is a legacy config from older versions; a fresh install does not need it. It is only imported into the registry once, on first deployment, and no longer participates in auth afterwards. Use the `/admin` panel (requires `LX_ADMIN_PASSWORD_HASH`) to add/remove users or reset passwords.
+`LX_USERS` is legacy config from older versions; a fresh install does not need it. It is imported into the registry once on first boot and no longer participates in auth afterwards. Use the `/admin` panel to add/remove users or reset passwords. If you upgraded from an older version, delete it once your users are imported.
 
 ### 3. Deployment succeeded but client cannot connect. What to check first?
 
