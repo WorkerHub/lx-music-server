@@ -82,7 +82,7 @@
 
 ### 4. 设置管理员密码（`LX_ADMIN_PASSWORD_HASH`，必需）
 
-`LX_ADMIN_PASSWORD_HASH` 就是 `/admin` 管理面板的登录密码，**必须配置**。同步账号在管理面板里创建：不配置它，`/admin` 与 `/api/admin/*` 一律返回 404，而自助注册默认需要管理员批准，新部署的服务将没有任何可用账号。
+`LX_ADMIN_PASSWORD_HASH` 就是 `/admin` 管理面板的登录密码，**必须配置**：部署工作流缺少它会直接失败。同步账号在管理面板里创建——没有面板，`/admin` 与 `/api/admin/*` 一律返回 404，而自助注册默认需要管理员批准，服务上就没有任何可用账号。
 
 生成（建议使用 16 位以上随机密码）：
 
@@ -92,7 +92,7 @@ printf 'your_admin_password' | shasum -a 256
 node -e "console.log(require('crypto').createHash('sha256').update('your_admin_password').digest('hex'))"
 ```
 
-把输出的 64 位十六进制写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH`。服务端只保存这个 SHA-256、不保存明文；取值必须是合法的 64 位十六进制，否则部署直接失败。
+把输出的 64 位十六进制写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH`。服务端只保存这个 SHA-256、不保存明文；部署工作流要求它必须配置且为合法的 64 位十六进制，缺失或格式非法都会让部署直接失败。
 
 管理员密码与同步用户密码相互独立：它不参与同步，也不会占用任何同步用户名。
 
@@ -137,9 +137,11 @@ https://lx-music-server.<your-subdomain>.workers.dev
 
 ## 管理面板
 
-面板入口 `https://<worker-url>/admin`，只对管理员开放，与同步用户完全分离。登录时用生成 `LX_ADMIN_PASSWORD_HASH` 的那个管理员密码（生成方法见部署指南第 4 步）；未配置它时面板与 `/api/admin/*` 一律返回 404。
+面板入口 `https://<worker-url>/admin`，只对管理员开放，与同步用户完全分离。登录时用生成 `LX_ADMIN_PASSWORD_HASH` 的那个管理员密码（生成方法见部署指南第 4 步）。部署工作流要求它必须配置：未配置时部署直接失败；本地 `pnpm dev` 未配置它时，面板与 `/api/admin/*` 返回 404。
 
-> 轮换管理员密码：把新的 SHA-256 写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署，旧会话立即失效。从 GitHub Secrets 删除它**不会**删除 Worker 上已有的 Secret（`wrangler deploy --secrets-file` 只增改、不删除），要彻底移除需再执行 `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH`。
+> 轮换管理员密码：把新的 SHA-256 写入 GitHub Secret `LX_ADMIN_PASSWORD_HASH` 并重新部署，旧会话立即失效。
+>
+> 停用面板要两步都做，缺一步都不成：先删除 GitHub 仓库里的这个 Secret（此后每次 CI 部署都会失败），再执行 `pnpm wrangler secret delete LX_ADMIN_PASSWORD_HASH`。只删 GitHub Secret，Worker 上的旧值还在、面板照常可用；只执行 `wrangler secret delete`，面板当下返回 404，但下一次 CI 部署会把 GitHub Secret 的值重新写回（`wrangler deploy --secrets-file` 只增改、不删除），面板随部署复活。两步都做完后，在重新配置该 Secret 之前无法再经 CI 部署。
 
 面板能力：
 
@@ -195,7 +197,7 @@ pnpm dev
 LX_ADMIN_PASSWORD_HASH='<管理员密码的 64 位 SHA-256>'
 ```
 
-`pnpm dev` 后打开 `http://localhost:8787/admin`，用该密码登录并添加测试用户即可。Secret 只从环境或 `.dev.vars` 读取，不写进 `wrangler.toml`；未配置 `LX_ADMIN_PASSWORD_HASH` 时面板与 `/api/admin/*` 返回 404（本地也一样），配置了但格式不合法时部署工作流会失败。
+`pnpm dev` 后打开 `http://localhost:8787/admin`，用该密码登录并添加测试用户即可。Secret 只从环境或 `.dev.vars` 读取，不写进 `wrangler.toml`；未配置 `LX_ADMIN_PASSWORD_HASH` 时面板与 `/api/admin/*` 返回 404（本地也一样）；CI 部署则要求该 Secret 必须存在且为合法的 64 位十六进制，缺失或格式非法都会让部署直接失败。
 
 `LX_USERS` 是旧版本遗留的一次性播种源，本地开发用不到；要复现旧版升级时再加一行 `LX_USERS='[{"name":"admin","password":"your_password"}]'`（必须是合法 JSON 数组，格式见迁移说明的附录）。
 
@@ -222,7 +224,7 @@ pnpm deploy
 3. **新增 `RATE_LIMITER` 绑定**：`wrangler.toml` 新增了认证限流绑定，`namespace_id` 需在账号内唯一，如与现有 Worker 冲突请修改后再部署。
 4. **`SERVER_NAME` 保留在 `[vars]`**：非敏感显示名仍留在 `wrangler.toml` 的 `[vars]` 中，可在控制台直接查看/修改。
 5. **用户注册表迁移到 Registry DO**：新增 `UserRegistryDO` 与 `v2` migration（部署时自动应用），此后用户的增删改查都由注册表负责（旧版 `LX_USERS` 只在首次启动时导入一次，见第 1 条）。旧客户端无需改动，`/ah`、`/socket`、`/devices` 协议与返回不变。
-6. **`LX_ADMIN_PASSWORD_HASH` 是管理面板密码（必需）**：未配置时 `/admin` 与 `/api/admin/*` 返回 404；取值不是合法的 64 位十六进制 SHA-256 时部署直接失败。新安装和升级都请先生成并写入该 Secret，再触发部署。
+6. **`LX_ADMIN_PASSWORD_HASH` 是管理面板密码（必需）**：部署工作流要求它必须配置且为合法的 64 位十六进制 SHA-256，缺失或格式非法都会让部署直接失败（本地 `pnpm dev` 未配置时面板与 `/api/admin/*` 返回 404）。新安装和升级都请先生成并写入该 Secret，再触发部署。
 
 ### 附录：`LX_USERS` 格式（仅旧版升级或本地开发参考）
 
@@ -283,7 +285,7 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：`KV_NAMESPACE_ID`、`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 三项都必须放在 **Secrets**（Secrets 的值会在日志中自动打码）。
 
-放到 Variables 部署工作流读不到：缺 `KV_NAMESPACE_ID` 会直接报错，缺管理员密码则会得到一个没有管理面板、无法创建账号的部署。`LX_USERS` 属于旧版本遗留配置，新安装不用配（若配了，必须是合法 JSON 数组）。
+放到 Variables 部署工作流读不到：缺 `KV_NAMESPACE_ID` 会直接报错，缺管理员密码同样会让部署直接失败——不会再产出「部署成功但没有管理面板、无法创建账号」的版本。`LX_USERS` 属于旧版本遗留配置，新安装不用配（若配了，必须是合法 JSON 数组）。
 
 ### 2. 我改了 `LX_USERS` 但没有生效？
 

@@ -42,10 +42,13 @@ jobs:
           #   JSON 数组: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           #   也支持 passwordHash: [{"name":"user1","passwordHash":"<32位hex MD5>"}]
           #   必须为合法 JSON 数组；未设置或为空则跳过播种，部署继续。
-          # LX_ADMIN_PASSWORD_HASH secret 格式（可选；为空即整体关闭 /admin（404））:
-          #   管理员密码的 SHA-256（64 位小写 hex）。
-          #   注意：从 GitHub Secrets 删除它不会移除 Worker 上已有的 secret，
-          #   停用面板还需手动执行 `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。
+          # LX_ADMIN_PASSWORD_HASH secret（必填；缺失或格式非法都会让部署失败）:
+          #   管理员密码的 SHA-256（64 位 hex，大小写不敏感，统一以小写下发）。
+          #   轮换：写入新哈希重新部署即可。停用面板必须两步都做——先删除本仓库的
+          #   该 Secret（此后每次 CI 部署都会失败），再执行
+          #   `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。只删 GitHub Secret，
+          #   Worker 上的旧值还在、面板照常可用；只执行 `wrangler secret delete`，
+          #   下一次 CI 部署会把 GitHub Secret 的值写回（`--secrets-file` 只增改、不删除）。
           python3 - <<'EOF'
           import os, json, re, sys
 
@@ -77,14 +80,17 @@ jobs:
                   sys.exit(1)
               secrets["LX_USERS"] = json.dumps(users)
 
-          # LX_ADMIN_PASSWORD_HASH 可选：为空即整体关闭 /admin（404）。有值时
-          # 必须为 64 位十六进制 SHA-256，非法仍报错退出。
+          # LX_ADMIN_PASSWORD_HASH 必填：面板是部署产物的一部分，缺了它新装就
+          # 没有任何可用账号（面板 404、自助注册锁死在 approval）。缺失与格式
+          # 非法都在这里失败，不再产出「部署成功但没有面板」的状态。
           admin_hash = os.environ.get("LX_ADMIN_PASSWORD_HASH", "").strip().lower()
-          if admin_hash:
-              if not re.fullmatch(r"[0-9a-f]{64}", admin_hash):
-                  print("::error:: LX_ADMIN_PASSWORD_HASH must be a 64-character hex SHA-256 digest", file=sys.stderr)
-                  sys.exit(1)
-              secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
+          if not admin_hash:
+              print("::error:: LX_ADMIN_PASSWORD_HASH is required: set the repository Secret (secrets.LX_ADMIN_PASSWORD_HASH) to the 64-character hex SHA-256 digest of the admin password (see the README deployment guide)", file=sys.stderr)
+              sys.exit(1)
+          if not re.fullmatch(r"[0-9a-f]{64}", admin_hash):
+              print("::error:: LX_ADMIN_PASSWORD_HASH must be a 64-character hex SHA-256 digest", file=sys.stderr)
+              sys.exit(1)
+          secrets["LX_ADMIN_PASSWORD_HASH"] = admin_hash
 
           runner_temp = os.environ.get("RUNNER_TEMP", "")
           if not runner_temp:
