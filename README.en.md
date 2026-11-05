@@ -80,16 +80,26 @@ Secrets:
 |---|---|
 | `KV_NAMESPACE_ID` | KV namespace ID (stored as a Secret; GitHub masks it in logs) |
 | `CLOUDFLARE_API_TOKEN` | API token from step 2 |
-| `LX_USERS` | User config list (**optional**; one-time seeding source — instances already seeded can skip it; if set, it must be a valid JSON array) |
+| `LX_USERS` | User config list (**optional, legacy config from older versions**; a fresh install does not need it — only upgrades use it as a one-time seeding source; if set, it must be a valid JSON array) |
 | `LX_ADMIN_PASSWORD_HASH` | SHA-256 of the admin panel password (**optional**; empty disables /admin entirely (404)) |
 
-### 4. Configure users (`LX_USERS`, optional, first-boot seeding)
+### 4. Configure users (`LX_USERS`, optional, legacy config from older versions)
 
-- **New deployment**: `LX_USERS` is **optional** — it is a **one-time seeding source**: instances already seeded in production can skip it. If you do set it, it must be a valid JSON array (missing or empty does not fail the deployment; seeding is simply skipped).
-- **Upgrading from an older version**: `LX_ADMIN_PASSWORD_HASH` is **optional** (empty disables `/admin` entirely with a 404). If you already use the panel, configure it (the SHA-256 of the admin panel password) **before** deploying; a malformed value still fails the deployment.
-- **After deploying the new version**: open `/admin` and confirm all of your existing users are present (the one-time import has completed), **then** delete the `LX_USERS` secret (if you had set one). From then on, add, remove or reset users in the admin panel.
+> **A fresh install does not need `LX_USERS` — skip this section.**
+>
+> `LX_USERS` is a **one-time seeding source** left over from the days when older versions kept users in the deployment config: it is imported once, while the registry is empty, and afterwards the registry is authoritative and this value no longer takes part in auth. So:
+>
+> - **Fresh install**: don't create `LX_USERS`. Once deployed, create accounts in the `/admin` panel (or let users self-register, depending on the registration mode).
+> - **Upgrading from an older version**: only if you actually had `LX_USERS` configured. After deploying the new version, open `/admin` and confirm all of your existing users are present (the one-time import has completed), **then** delete the secret.
 
-The rest of this section documents the `LX_USERS` format and the security notes; you only need it for first-boot seeding, including upgrades from an older version.
+#### Upgrading: one-time import, verify, then delete
+
+1. **Before deploying (panel only)**: if you already use the `/admin` panel, configure `LX_ADMIN_PASSWORD_HASH` (the SHA-256 of the admin password) first. It is optional too: empty disables `/admin` entirely (404), while a malformed value fails the deployment.
+2. **Deploy the new version**: the registry imports the users in `LX_USERS` once on first boot (they land as `active` / `source=imported`); the server never reads it again.
+3. **After deploying, verify**: open `/admin` and confirm the users match what you expect. If any are missing, add them first (re-set `LX_USERS` and deploy, or create them in the panel) — don't delete yet.
+4. **Then delete**: remove the `LX_USERS` secret from the GitHub repo. Deleting it only stops it from being uploaded; an existing value on the Cloudflare side stays until you run `wrangler secret delete LX_USERS` (or delete it in the dashboard). Leaving it does not affect auth, because seeding has already completed.
+
+#### `LX_USERS` format (only needed for upgrades or local development)
 
 `LX_USERS` is delivered as a **Secret** (uploaded by GitHub Actions via `wrangler deploy --secrets-file`, no longer written to `wrangler.toml` `[vars]`, so it does not show up in plaintext in the Cloudflare dashboard variables list). Only the JSON array format is supported, and it must be a valid JSON array:
 
@@ -118,7 +128,7 @@ Supported fields:
 >
 > Storing `passwordHash` keeps the plaintext password out of the Cloudflare dashboard, but it is still a password-equivalent derived value — anyone who obtains it can authenticate and sync as that user. Either way, always use a strong random password.
 
-`LX_USERS` is only imported into the registry on the **first deployment** (users land as `active` / `source=imported`); after that the registry is authoritative, so editing `LX_USERS` later does not touch existing users — add, remove or reset users in the admin panel. `LX_USERS` is optional (a one-time seeding source): instances already seeded can skip it; if set, it must be a valid JSON array, and missing/empty simply skips seeding and the deployment continues.
+`LX_USERS` is only imported into the registry on the **first deployment** (users land as `active` / `source=imported`); after that the registry is authoritative, so editing `LX_USERS` later does not touch existing users — add, remove or reset users in the admin panel. If you do set it, it must be a valid JSON array (missing or empty does not fail the deployment; seeding is simply skipped).
 
 ### 5. Trigger deployment
 
@@ -242,7 +252,7 @@ pnpm deploy
 
 This security hardening round changed some configuration and deployment behavior. When upgrading from an older version:
 
-1. **`LX_USERS` moved from `[vars]` to a Secret (required in older versions, optional now)**: deployment no longer writes passwords into `wrangler.toml`; GitHub Actions now uploads them via `wrangler deploy --secrets-file`. The current version treats it as optional (a one-time seeding source); if you are upgrading from an older version and want to keep your existing accounts, set the secret first and then re-run the deployment. For local development, use the `.dev.vars` file above.
+1. **`LX_USERS` moved from `[vars]` to a Secret (required in older versions, optional now)**: deployment no longer writes passwords into `wrangler.toml`; GitHub Actions now uploads them via `wrangler deploy --secrets-file`. The current version treats it as an optional legacy config (a one-time seeding source) — **a fresh install does not need it**; if you are upgrading from an older version and want to keep your existing accounts, set the secret first and re-run the deployment, then delete it once the users are imported. For local development, use the `.dev.vars` file above.
 2. **(Optional) migrate plaintext passwords to `passwordHash`**: replace `password` with `passwordHash` (32-char hex MD5) in `LX_USERS` so plaintext no longer appears in config. See "Configure users" for how to generate it. Both plaintext `password` and `passwordHash` remain supported.
 3. **New `RATE_LIMITER` binding**: `wrangler.toml` now declares the auth rate-limiting binding; its `namespace_id` must be unique in your account — change it before deploying if it collides with an existing Worker.
 4. **`SERVER_NAME` stays in `[vars]`**: this non-sensitive display name remains in `wrangler.toml` `[vars]` and can be viewed/edited in the dashboard.
@@ -285,7 +295,7 @@ If any of them is placed under Variables instead, deployment will fail.
 
 ### 2. I changed `LX_USERS`, but users did not update. Why?
 
-`LX_USERS` is only imported into the registry on first deployment; it no longer participates in auth. Use the `/admin` panel (requires `LX_ADMIN_PASSWORD_HASH`) to add/remove users or reset passwords.
+`LX_USERS` is a legacy config from older versions; a fresh install does not need it. It is only imported into the registry once, on first deployment, and no longer participates in auth afterwards. Use the `/admin` panel (requires `LX_ADMIN_PASSWORD_HASH`) to add/remove users or reset passwords.
 
 ### 3. Deployment succeeded but client cannot connect. What to check first?
 
