@@ -44,10 +44,11 @@ jobs:
           #   必须为合法 JSON 数组；未设置或为空则跳过播种，部署继续。
           # LX_ADMIN_PASSWORD_HASH secret（必填；缺失或格式非法都会让部署失败）:
           #   管理员密码的 SHA-256（64 位 hex，大小写不敏感，统一以小写下发）。
-          #   `wrangler deploy --secrets-file` 只增改、不删除 Worker 上已有的
-          #   secret：轮换直接写入新哈希重新部署即可。要停用面板需手动执行
-          #   `wrangler secret delete LX_ADMIN_PASSWORD_HASH`，此后 CI 部署会因
-          #   缺少该 Secret 失败。
+          #   轮换：写入新哈希重新部署即可。停用面板必须两步都做——先删除本仓库的
+          #   该 Secret（此后每次 CI 部署都会失败），再执行
+          #   `wrangler secret delete LX_ADMIN_PASSWORD_HASH`。只删 GitHub Secret，
+          #   Worker 上的旧值还在、面板照常可用；只执行 `wrangler secret delete`，
+          #   下一次 CI 部署会把 GitHub Secret 的值写回（`--secrets-file` 只增改、不删除）。
           python3 - <<'EOF'
           import os, json, re, sys
 
