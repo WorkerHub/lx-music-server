@@ -285,7 +285,7 @@ flowchart TD
 
 先检查 GitHub Actions 配置项位置是否放对：`KV_NAMESPACE_ID`、`CLOUDFLARE_API_TOKEN`、`LX_ADMIN_PASSWORD_HASH` 三项都必须放在 **Secrets**（Secrets 的值会在日志中自动打码）。
 
-放到 Variables 部署工作流读不到：缺 `KV_NAMESPACE_ID` 会直接报错，缺管理员密码则会得到一个没有管理面板、无法创建账号的部署。`LX_USERS` 属于旧版本遗留配置，新安装不用配（若配了，必须是合法 JSON 数组）。
+放到 Variables 部署工作流读不到：缺 `KV_NAMESPACE_ID` 会直接报错，缺管理员密码同样会让部署直接失败——不会再产出「部署成功但没有管理面板、无法创建账号」的版本。`LX_USERS` 属于旧版本遗留配置，新安装不用配（若配了，必须是合法 JSON 数组）。
 
 ### 2. 我改了 `LX_USERS` 但没有生效？
 

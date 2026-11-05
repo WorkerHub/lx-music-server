@@ -287,7 +287,7 @@ Key dependencies:
 
 Check where the GitHub Actions items live: `KV_NAMESPACE_ID`, `CLOUDFLARE_API_TOKEN` and `LX_ADMIN_PASSWORD_HASH` all belong in **Secrets** (Secrets are masked in logs).
 
-Under Variables the deploy workflow cannot read them: a missing `KV_NAMESPACE_ID` fails the deployment outright, and a missing admin password produces a deployment with no admin panel and no way to create accounts. `LX_USERS` is legacy config from older versions; a fresh install does not need it (if set, it must be a valid JSON array).
+Under Variables the deploy workflow cannot read them: a missing `KV_NAMESPACE_ID` fails the deployment outright, and a missing admin password fails it too — there is no longer a deployment that succeeds without an admin panel. `LX_USERS` is legacy config from older versions; a fresh install does not need it (if set, it must be a valid JSON array).
 
 ### 2. I changed `LX_USERS`, but users did not update. Why?
 
