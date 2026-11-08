@@ -13,7 +13,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Table of Contents
 
-- [Preview](#Preview)
+- [Preview](#preview)
 - [Why This Version](#why-this-version)
 - [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
@@ -29,15 +29,18 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Preview
 
-Home:
-<img src=".github/assets/imgs/home.webp" alt="Home" width="800">
+Three main screens: the dashboard, user management and settings.
 
-User management：
-<img src=".github/assets/imgs/home.webp" alt="User-management" width="800">
+<p align="center">
+  <img src=".github/assets/imgs/home.webp" alt="Home dashboard" width="800"><br>
+  <sub><b>Home</b>: user and device totals, pending items and recent sign-ups</sub>
+</p>
 
-Settings：
-<img src=".github/assets/imgs/home.webp" alt="Settings：" width="800">
-
+<p align="center">
+  <img src=".github/assets/imgs/managment.webp" alt="User management" width="406">
+  <img src=".github/assets/imgs/settings.webp" alt="Settings" width="390"><br>
+  <sub><b>User management</b>: account status, devices, snapshot limit and actions · <b>Settings</b>: registration mode and global switches</sub>
+</p>
 
 ## Why This Version
 
