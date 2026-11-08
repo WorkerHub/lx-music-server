@@ -13,7 +13,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 
 ## Table of Contents
 
-- [Preview](#Preview)
+- [Preview](#preview)
 - [Why This Version](#why-this-version)
 - [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
