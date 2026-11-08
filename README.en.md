@@ -37,7 +37,7 @@ Three main screens: the dashboard, user management and settings.
 </p>
 
 <p align="center">
-  <img src=".github/assets/imgs/managment.webp" alt="User management" width="406">
+  <img src=".github/assets/imgs/management.webp" alt="User management" width="406">
   <img src=".github/assets/imgs/settings.webp" alt="Settings" width="390"><br>
   <sub><b>User management</b>: account status, devices, snapshot limit and actions · <b>Settings</b>: registration mode and global switches</sub>
 </p>

@@ -36,7 +36,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/imgs/managment.webp" alt="用户管理" width="406">
+  <img src=".github/assets/imgs/management.webp" alt="用户管理" width="406">
   <img src=".github/assets/imgs/settings.webp" alt="系统设置" width="390"><br>
   <sub><b>用户管理</b>：账号状态、设备数、快照上限与各项操作 · <b>系统设置</b>：注册模式与全局开关</sub>
 </p>
