@@ -28,14 +28,18 @@
 
 ## 界面预览
 
-首页：
-<img src=".github/assets/imgs/home.webp" alt="首页" width="800">
+三块主界面：首页总览、用户管理、系统设置。
 
-用户管理：
-<img src=".github/assets/imgs/home.webp" alt="用户管理" width="800">
+<p align="center">
+  <img src=".github/assets/imgs/home.webp" alt="首页" width="800"><br>
+  <sub><b>首页</b>：用户与设备总量、待处理事项、最近注册</sub>
+</p>
 
-系统设置：
-<img src=".github/assets/imgs/home.webp" alt="系统设置" width="800">
+<p align="center">
+  <img src=".github/assets/imgs/managment.webp" alt="用户管理" width="406">
+  <img src=".github/assets/imgs/settings.webp" alt="系统设置" width="390"><br>
+  <sub><b>用户管理</b>：账号状态、设备数、快照上限与各项操作 · <b>系统设置</b>：注册模式与全局开关</sub>
+</p>
 
 ## 为什么选这个版本
 
